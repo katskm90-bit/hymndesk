@@ -1235,7 +1235,7 @@ function projectRepItem(item){
   else if(item.type==='announcement')showAnnouncementSlide(item);
   else startProjection(item,item._repeatConfig||{});
 }
-function cycleProjBg(){const p=$i('projection');p.classList.remove(BG_CLASSES[projBgIndex]);projBgIndex=(projBgIndex+1)%BG_CLASSES.length;p.classList.add(BG_CLASSES[projBgIndex]);toast('BG: '+BG_LABELS[projBgIndex],'info');}
+function cycleProjBg(){const p=$i('projection');p.style.background='';p.classList.remove(...BG_CLASSES);projBgIndex=(projBgIndex+1)%BG_CLASSES.length;p.classList.add(BG_CLASSES[projBgIndex]);toast('BG: '+BG_LABELS[projBgIndex],'info');}
 // Swipe
 let swX=0;
 $i('projection').addEventListener('touchstart',e=>{swX=e.touches[0].clientX;},{passive:true});
@@ -1243,6 +1243,7 @@ $i('projection').addEventListener('touchend',e=>{const dx=e.changedTouches[0].cl
 $i('exit-proj').addEventListener('click',exitProjection);
 $i('fullscreen-btn').addEventListener('click',()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen().catch(()=>toast('Fullscreen not available','error'));else document.exitFullscreen().catch(()=>{});});
 $i('proj-bg-btn').addEventListener('click',cycleProjBg);
+if($i('proj-color-picker')) { $i('proj-color-picker').addEventListener('input', function(e) { const p=$i('projection'); p.classList.remove(...BG_CLASSES); p.style.background=e.target.value; }); }
 $i('next-stanza').addEventListener('click',nextSlide);
 $i('prev-stanza').addEventListener('click',prevSlide);
 $i('font-inc').addEventListener('click',()=>{projFontSize=Math.min(96,projFontSize+4);applyFontSize();});
