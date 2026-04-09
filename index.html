@@ -791,7 +791,7 @@ let editingRep=null,currentRep=null,repToDelete=null,repeatConfigItem=null;
 let editingSlide=null,editingSegmentItem=null;
 let projSequence=[],projSeqIndex=0,projHymn=null;
 let repProjection=[],repProjIndex=0,fromRep=false,currentProjHymnData=null;
-let projFontSize=48,projBgIndex=0;
+let projFontSize=window.innerWidth<=480?26:48,projBgIndex=0;
 let bannerTimer=null,bannerCurrent=0;
 let nextId=Date.now();
 function uid(){return 'id_'+(nextId++);}
