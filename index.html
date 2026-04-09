@@ -16,40 +16,27 @@
 @keyframes spin{to{transform:rotate(360deg)}}.toast{display:flex;align-items:center;gap:7px;padding:9px 13px;border-radius:9px;color:#fff;font-weight:600;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,0.2);animation:slideIn 0.22s ease-out;pointer-events:auto;transition:opacity 0.3s,transform 0.3s}.toast-success{background:#065f46;border:1px solid #059669}.toast-error{background:#7f1d1d;border:1px solid #dc2626}.toast-info{background:#1e3a5f;border:1px solid #2563eb}.toast svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0}
 /* ── MOBILE & TABLET RESPONSIVE ─────────────────────────────────────── */
 @media(max-width:480px){
-  /* Header */
   .app-header{padding:10px 12px;gap:8px}
   .logo-title{font-size:18px}
   .hymn-count{display:none}
   .btn{padding:7px 10px;font-size:12px;gap:4px}
   .btn svg{width:13px;height:13px}
   .header-right{gap:5px}
-
-  /* Home toolbar */
   .home-toolbar{padding:12px 12px 6px;gap:8px}
   .home-toolbar h2{font-size:17px}
-
-  /* Book grid — 2 columns on phone */
   .book-grid{grid-template-columns:repeat(2,1fr);gap:9px;padding:6px 12px 16px}
   .book-card{padding:14px 12px}
   .book-card-name{font-size:13px}
   .book-card-lang{font-size:11px}
   .book-card-count{font-size:11px}
-
-  /* Book view */
   .book-view-header{padding:10px 12px;gap:8px}
   .inner-search{padding:8px 12px 0}
   .hymn-filters{padding:7px 12px;gap:6px}
   .hymn-filters select{font-size:12px;padding:5px 8px}
-
-  /* Hymn grid — 1 column on phone */
   .hymn-grid{grid-template-columns:1fr;gap:9px;padding:8px 12px 16px}
   .hymn-card{padding:13px}
   .card-title{font-size:14px}
-
-  /* Empty state */
   .empty-state{padding:40px 16px}
-
-  /* Modals */
   .modal-overlay{padding:8px}
   .modal-box{padding:16px;border-radius:14px}
   .modal-box.wide{max-width:100%}
@@ -59,8 +46,6 @@
   .modal-sub{font-size:11px}
   .form-row{grid-template-columns:1fr}
   .action-row{gap:6px}
-
-  /* Projection — phone-friendly */
   .proj-header{top:6px;left:6px;right:6px;gap:4px;flex-direction:column;align-items:flex-start}
   .proj-btns{gap:3px}
   .proj-btn{padding:5px 8px;font-size:11px;gap:3px}
@@ -77,37 +62,22 @@
   .proj-indicator-hint{font-size:9px}
   .proj-font-controls{gap:2px}
   .proj-font-btn{padding:5px 7px;font-size:11px}
-
-  /* Repertoire items — stack controls below on phone */
   .rep-item-row{gap:6px}
   .rep-item-controls{flex-wrap:wrap;gap:4px}
   .rep-item-title{font-size:12px}
   .key-select{font-size:11px;padding:3px 5px}
-
-  /* Banner */
   .banner-manage-btn{font-size:10px;padding:3px 7px}
   .banner-content{padding:12px 16px}
-
-  /* Breadcrumb */
   .breadcrumb{font-size:12px}
   .book-view-header .btn{padding:6px 10px;font-size:12px}
-
-  /* Rep list grid */
   #rep-grid{grid-template-columns:1fr!important}
-
-  /* Sol-fa */
   .solfa-grid-wrap{padding:9px}
   .solfa-beat{min-width:22px;font-size:12px}
-
-  /* Repeat config */
   .repeat-section-row{flex-wrap:wrap;gap:5px}
-
-  /* Footer */
   footer{padding:8px 12px}
 }
 
 @media(min-width:481px) and (max-width:768px){
-  /* Tablet adjustments */
   .app-header{padding:12px 16px}
   .book-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));padding:8px 16px 20px}
   .hymn-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));padding:8px 16px 20px}
@@ -120,7 +90,6 @@
   #rep-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))!important}
 }
 
-/* Touch-friendly tap targets */
 @media(hover:none) and (pointer:coarse){
   .icon-btn{width:34px;height:34px}
   .rep-order-btn{width:30px;height:30px}
@@ -139,6 +108,11 @@
   <div class="logo">
     <div class="logo-icon"><svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>
     <span class="logo-title">Lyric Hub</span>
+    
+    <a id="header-yt-link" target="_blank" style="display:none; color: #E8650A; margin-left: 10px; display: flex; align-items: center;" title="Visit our YouTube">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+    </a>
+    <button id="manage-yt-btn" class="btn btn-ghost" style="display:none; padding: 4px 6px; margin-left: 5px; font-size: 11px;" title="Manage YouTube Link">Edit Link</button>
   </div>
   <div class="header-right">
     <span class="hymn-count" id="hymn-count">0 hymns</span>
@@ -198,7 +172,6 @@
   </div>
 </div>
 
-<!-- Add/Edit Hymn -->
 <div class="modal-overlay" id="add-modal">
   <div class="modal-box" style="max-width:640px">
     <button class="modal-close" id="close-add-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -246,7 +219,6 @@
   </div>
 </div>
 
-<!-- Projection -->
 <div id="projection" class="bg-black">
   <div class="proj-header">
     <div class="proj-btns">
@@ -294,7 +266,6 @@
   <div id="yt-float-body"><iframe id="yt-iframe" allowfullscreen allow="autoplay; encrypted-media"></iframe></div>
 </div>
 
-<!-- Sol-fa -->
 <div class="modal-overlay" id="solfa-modal">
   <div class="modal-box solfa-box">
     <button class="modal-close" id="close-solfa-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -304,7 +275,6 @@
   </div>
 </div>
 
-<!-- Repeat Config -->
 <div class="modal-overlay" id="repeat-modal">
   <div class="modal-box" style="max-width:460px">
     <button class="modal-close" id="close-repeat-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -315,7 +285,6 @@
   </div>
 </div>
 
-<!-- Segment Modal -->
 <div class="modal-overlay" id="segment-modal">
   <div class="modal-box narrow">
     <button class="modal-close" id="close-segment-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -335,7 +304,6 @@
   </div>
 </div>
 
-<!-- Banner Manager -->
 <div class="modal-overlay" id="banner-modal">
   <div class="modal-box" style="max-width:600px">
     <button class="modal-close" id="close-banner-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -347,7 +315,6 @@
   </div>
 </div>
 
-<!-- Add/Edit Slide -->
 <div class="modal-overlay" id="slide-modal">
   <div class="modal-box" style="max-width:500px">
     <button class="modal-close" id="close-slide-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -362,7 +329,6 @@
   </div>
 </div>
 
-<!-- Announcement Modal -->
 <div class="modal-overlay" id="ann-modal" style="z-index:260">
   <div class="modal-box narrow">
     <button class="modal-close" id="close-ann-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -374,7 +340,6 @@
   </div>
 </div>
 
-<!-- Service History Modal -->
 <div class="modal-overlay" id="history-modal">
   <div class="modal-box wide">
     <button class="modal-close" id="close-history-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -385,7 +350,6 @@
   </div>
 </div>
 
-<!-- Backup -->
 <div class="modal-overlay" id="backup-modal">
   <div class="modal-box narrow">
     <button class="modal-close" id="close-backup-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -414,7 +378,6 @@
   </div>
 </div>
 
-<!-- Repertoires List -->
 <div class="modal-overlay" id="rep-list-modal">
   <div class="modal-box wide">
     <button class="modal-close" id="close-rep-list"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -426,7 +389,6 @@
   </div>
 </div>
 
-<!-- Create/Edit Repertoire -->
 <div class="modal-overlay" id="rep-form-modal">
   <div class="modal-box narrow">
     <button class="modal-close" id="close-rep-form"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -439,7 +401,6 @@
   </div>
 </div>
 
-<!-- Repertoire Detail -->
 <div class="modal-overlay" id="rep-detail-modal">
   <div class="modal-box wide">
     <button class="modal-close" id="close-rep-detail"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -457,7 +418,6 @@
   </div>
 </div>
 
-<!-- Select Repertoire -->
 <div class="modal-overlay" id="sel-rep-modal">
   <div class="modal-box narrow">
     <button class="modal-close" id="close-sel-rep"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -471,7 +431,6 @@
   </div>
 </div>
 
-<!-- Delete Hymn -->
 <div class="modal-overlay" id="del-modal">
   <div class="modal-box narrow" style="text-align:center">
     <div class="del-icon-wrap"><svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></div>
@@ -481,13 +440,28 @@
   </div>
 </div>
 
-<!-- Delete Repertoire -->
 <div class="modal-overlay" id="del-rep-modal">
   <div class="modal-box narrow" style="text-align:center">
     <div class="del-icon-wrap"><svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></div>
     <h2 class="modal-title">Delete repertoire?</h2>
     <p style="color:#64748b;margin-top:4px;font-size:13px">All items will be removed. This cannot be undone.</p>
     <div class="action-row"><button class="btn btn-cancel" id="cancel-del-rep">Cancel</button><button class="btn btn-red" id="confirm-del-rep">Delete</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="yt-link-modal">
+  <div class="modal-box narrow">
+    <button class="modal-close" id="close-yt-link-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    <h2 class="modal-title">Header YouTube Link</h2>
+    <p class="modal-sub">Set the global channel link that appears next to the Lyric Hub logo.</p>
+    <div class="form-group">
+      <label class="fl">YouTube URL</label>
+      <input type="url" id="yt-link-input" placeholder="https://youtube.com/...">
+    </div>
+    <div class="action-row">
+      <button class="btn btn-cancel" id="delete-yt-link">Remove Link</button>
+      <button class="btn btn-purple" id="save-yt-link" style="flex:2; justify-content:center;">Save Link</button>
+    </div>
   </div>
 </div>
 
@@ -510,6 +484,61 @@ function load(){
 }
 let hymns=[],repertoires=[],repItems=[],bannerSlides=[],serviceHistory=[];
 load();
+
+// --- NEW: Admin Control & YouTube Link Logic ---
+const isAdmin = new URLSearchParams(window.location.search).get('admin') === 'true';
+let globalYtLink = localStorage.getItem('lh_header_yt') || '';
+
+function applyAccessControls() {
+  if (isAdmin) {
+    $i('manage-yt-btn').style.display = 'inline-flex';
+  } else {
+    if($i('backup-btn')) $i('backup-btn').style.display = 'none';
+    if($i('banner-manage-btn')) $i('banner-manage-btn').style.display = 'none';
+    if($i('manage-banner-btn-2')) $i('manage-banner-btn-2').style.display = 'none';
+    if($i('add-hymn-btn')) $i('add-hymn-btn').style.display = 'none';
+    if($i('book-add-hymn-btn')) $i('book-add-hymn-btn').style.display = 'none';
+    if($i('empty-add-btn')) $i('empty-add-btn').style.display = 'none';
+    const style = document.createElement('style');
+    style.innerHTML = `.del-h { display: none !important; }`;
+    document.head.appendChild(style);
+  }
+}
+
+function renderHeaderYtLink() {
+  const a = $i('header-yt-link');
+  if (globalYtLink) {
+    a.href = globalYtLink;
+    a.style.display = 'inline-flex';
+  } else {
+    a.style.display = 'none';
+  }
+}
+
+$i('manage-yt-btn').addEventListener('click', () => {
+  $i('yt-link-input').value = globalYtLink;
+  openModal('yt-link-modal');
+});
+$i('close-yt-link-modal').addEventListener('click', () => closeModal('yt-link-modal'));
+
+$i('save-yt-link').addEventListener('click', () => {
+  const val = $i('yt-link-input').value.trim();
+  globalYtLink = val;
+  localStorage.setItem('lh_header_yt', val);
+  renderHeaderYtLink();
+  closeModal('yt-link-modal');
+  toast('YouTube link saved', 'success');
+});
+
+$i('delete-yt-link').addEventListener('click', () => {
+  globalYtLink = '';
+  localStorage.removeItem('lh_header_yt');
+  renderHeaderYtLink();
+  closeModal('yt-link-modal');
+  toast('YouTube link removed', 'info');
+});
+// ---------------------------------------------
+
 let currentBook=null,bookSearchQ='',bFilterType='all',bFilterChorus='all',bFilterFav=false;
 let hymnToDelete=null,hymnToAddToRep=null,editingHymn=null;
 let editingRep=null,currentRep=null,repToDelete=null,repeatConfigItem=null;
@@ -713,7 +742,7 @@ function renderHymnGrid(){
  </div>
  </div>`;
   }).join('');
-  grid.querySelectorAll('.hymn-card').forEach(c=>{c.addEventListener('click',e=>{if(e.target.closest('.add-rep,.edit-h,.del-h'))return;const h=hymns.find(x=>x.id===c.dataset.id);if(h)startProjection(h,{});});});
+  grid.querySelectorAll('.hymn-card').forEach(c=>{c.addEventListener('click',e=>{if(e.target.closest('.add-rep,.edit-h,.del-h,.qr-h,.fav-h'))return;const h=hymns.find(x=>x.id===c.dataset.id);if(h)startProjection(h,{});});});
   grid.querySelectorAll('.del-h').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();hymnToDelete=hymns.find(h=>h.id===b.dataset.id);openModal('del-modal');}));
   grid.querySelectorAll('.edit-h').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();openAddModal(hymns.find(h=>h.id===b.dataset.id));}));
   grid.querySelectorAll('.add-rep').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();hymnToAddToRep=hymns.find(h=>h.id===b.dataset.id);showSelRepModal();}));
@@ -736,7 +765,6 @@ function updateBookDropdown(lang,current){
 function openAddModal(hymn){
   editingHymn=hymn||null;
   $i('add-modal-title').textContent=hymn?'Edit hymn':'Add new hymn';
-  $i('add-modal-sub').textContent=hymn?'Update the details below':'Fill in the details below';
   $i('f-title').value=hymn?hymn.title:'';
   $i('f-lang').value=hymn?hymn.language:'';
   $i('f-number').value=hymn?hymn.number:'';
@@ -752,6 +780,20 @@ function openAddModal(hymn){
   if(hymn&&hymn.classification==='uncommon')$i('f-uncommon').checked=true;else $i('f-common').checked=true;
   $i('form-error').classList.remove('show');
   updateBookDropdown(hymn?hymn.language:'',hymn?hymn.book:'');
+
+  const restrictedFields = ['f-title', 'f-lang', 'f-book', 'f-number', 'f-common', 'f-uncommon', 'f-yt', 'f-vocal', 'f-inst', 'f-soprano', 'f-alto', 'f-tenor', 'f-bass', 'f-notes'];
+  if (!isAdmin) {
+    restrictedFields.forEach(id => {
+      if($i(id)) $i(id).disabled = true;
+    });
+    $i('add-modal-sub').textContent = 'User Mode: You can only edit Lyrics and Chorus.';
+  } else {
+    restrictedFields.forEach(id => {
+      if($i(id)) $i(id).disabled = false;
+    });
+    $i('add-modal-sub').textContent = hymn?'Update the details below':'Fill in the details below';
+  }
+
   openModal('add-modal');
 }
 function saveHymn(){
@@ -1265,7 +1307,7 @@ document.addEventListener('keydown',e=>{
 });
 document.addEventListener('keyup',e=>{if(e.key===' '){spaceHeld=false;stopListening();}});
 // BACKDROP CLOSE
-['add-modal','rep-list-modal','rep-form-modal','rep-detail-modal','sel-rep-modal','del-modal','del-rep-modal','solfa-modal','repeat-modal','segment-modal','ann-modal','banner-modal','slide-modal','backup-modal','history-modal'].forEach(id=>{
+['add-modal','rep-list-modal','rep-form-modal','rep-detail-modal','sel-rep-modal','del-modal','del-rep-modal','solfa-modal','repeat-modal','segment-modal','ann-modal','banner-modal','slide-modal','backup-modal','history-modal','yt-link-modal'].forEach(id=>{
   $i(id).addEventListener('click',e=>{if(e.target===$i(id))closeModal(id);});
 });
 // ── SERVICE HISTORY ─────────────────────────────────────────────────────────
@@ -1434,6 +1476,11 @@ async function syncHymnsFromGithub(){
 
 renderBanner();
 renderBookGrid();
-syncHymnsFromGithub();</script>
+syncHymnsFromGithub();
+
+// Run access controls and header render after all UI binds are ready
+applyAccessControls();
+renderHeaderYtLink();
+</script>
 </body>
 </html>
