@@ -1788,8 +1788,8 @@ async function syncHymnsFromGithub(){
     if(currentBook)renderHymnGrid();
 
     localStorage.setItem('lh_last_sync',Date.now().toString());
-    showSyncBanner('Library up to date');
-    setTimeout(()=>showSyncBanner(null),3000);
+    showSyncBanner('Library up to date — '+hymns.length+' hymns loaded');
+    setTimeout(()=>showSyncBanner(null),4000);
   }catch(e){
     showSyncBanner('Offline — using saved library');
     setTimeout(()=>showSyncBanner(null),3000);
@@ -1799,13 +1799,20 @@ async function syncHymnsFromGithub(){
 // ── ADMIN PUBLISH BUTTON ─────────────────────────────────────────────
 // Exports hymns.json so admin can upload it to GitHub and push to all users
 function exportAndPublish(){
+  // Safety check: never export if hymns list is empty — prevents wiping all user devices
+  if(!hymns||hymns.length===0){
+    alert('⚠️ Cannot publish — the hymn library is empty in memory right now.\n\nThis usually means the page has not finished syncing yet.\n\nPlease wait 10 seconds and try again. If it still shows empty, refresh the page and log in as admin again before clicking Publish.');
+    return;
+  }
+  const confirmed=confirm('You are about to publish '+hymns.length+' hymns to all users.\n\nThis will overwrite what all user devices see.\n\nAre you sure you want to continue?');
+  if(!confirmed)return;
   const payload={hymns:hymns,bannerSlides:bannerSlides};
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url;a.download='hymns.json';a.click();
   URL.revokeObjectURL(url);
-  toast('hymns.json downloaded — now upload it to GitHub to publish changes to all users','info');
+  toast('hymns.json exported with '+hymns.length+' hymns — now upload to GitHub to publish to all users','info');
 }
 if(isAdmin){
   const pb=$i('publish-btn');
