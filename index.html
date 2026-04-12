@@ -130,6 +130,7 @@
   <div class="header-right">
     <span class="hymn-count" id="hymn-count">0 hymns</span>
     <button class="btn btn-amber" id="backup-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>Backup</button>
+    <button class="btn btn-green" id="publish-btn" style="display:none" title="Export hymns.json and upload to GitHub to push changes to all users"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12"/></svg>Publish</button>
     <button class="btn btn-blue" id="rep-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Repertoires</button>
     <button class="btn btn-teal" id="app-info-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>Info</button>
     <button class="btn btn-green" id="add-hymn-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>Add Hymn</button>
@@ -148,6 +149,37 @@
   <div class="home-toolbar">
     <h2>Hymn Books</h2>
     <button class="btn btn-ghost" id="manage-banner-btn-2"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>Manage Banner</button>
+  </div>
+
+  <!-- Donate Card — visible to all users on home screen -->
+  <div id="donate-home-card" style="margin:0 24px 20px;background:linear-gradient(135deg,#FFF8F3,#FFF0E6);border:2px solid #FFD9B8;border-radius:16px;padding:18px 20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;">
+      <div style="flex:1;min-width:180px;">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
+          <span style="font-size:20px;">🙏</span>
+          <span style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:#1e293b;">Support This Ministry</span>
+        </div>
+        <div style="font-size:12px;color:#64748b;line-height:1.5;">Your contribution keeps this hymn library free and growing for everyone.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <select id="donate-amount-select" style="padding:8px 10px;border:1px solid #FFD9B8;border-radius:8px;background:#fff;color:#1e293b;font-size:13px;font-weight:600;outline:none;cursor:pointer;-webkit-appearance:auto;">
+          <option value="">Choose amount</option>
+          <option value="20">R20</option>
+          <option value="50">R50</option>
+          <option value="100">R100</option>
+          <option value="200">R200</option>
+          <option value="500">R500</option>
+          <option value="custom">Other amount…</option>
+        </select>
+        <input type="number" id="donate-custom-input" placeholder="Amount (R)" min="1" style="display:none;width:130px;padding:8px 10px;border:1px solid #FFD9B8;border-radius:8px;background:#fff;color:#1e293b;font-size:13px;outline:none;">
+        <button class="btn btn-purple" id="donate-home-btn" style="padding:9px 18px;font-size:13px;">❤ Donate</button>
+      </div>
+    </div>
+    <div id="donate-eft-box" style="display:none;margin-top:14px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;font-size:13px;color:#166534;line-height:1.8;">
+      <strong>Bank:</strong> FNB &nbsp;|&nbsp; <strong>Account Name:</strong> Serenza Deluxe Atelier<br>
+      <strong>Account No:</strong> 62864862852 &nbsp;|&nbsp; <strong>Branch Code:</strong> 250 655<br>
+      <span style="font-size:11px;color:#4ade80;">Use your name as the payment reference. Thank you! 🙏</span>
+    </div>
   </div>
   <div class="book-grid" id="book-grid"></div>
   <div class="empty-state" id="home-empty" style="display:none">
@@ -1246,7 +1278,33 @@ let swX=0;
 $i('projection').addEventListener('touchstart',e=>{swX=e.touches[0].clientX;},{passive:true});
 $i('projection').addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-swX;if(Math.abs(dx)>44){if(dx<0)nextSlide();else prevSlide();}},{passive:true});
 $i('exit-proj').addEventListener('click',exitProjection);
-$i('fullscreen-btn').addEventListener('click',()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen().catch(()=>toast('Fullscreen not available','error'));else document.exitFullscreen().catch(()=>{});});
+// Cross-device fullscreen (iOS Safari does not support the Fullscreen API)
+function toggleFullscreen(){
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+  const isSafari=/^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  if(isIOS||(isSafari&&!document.fullscreenElement)){
+    toast('On iPhone/iPad: tap Share ➜ Add to Home Screen, then open from there for full-screen','info');
+    return;
+  }
+  const el=document.documentElement;
+  const requestFS=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+  const exitFS=document.exitFullscreen||document.webkitExitFullscreen||document.mozCancelFullScreen||document.msExitFullscreen;
+  const inFS=document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement;
+  if(!inFS){if(requestFS)requestFS.call(el).catch(()=>toast('Fullscreen not available on this device','error'));}
+  else{if(exitFS)exitFS.call(document).catch(()=>{});}
+}
+function updateFullscreenIcon(){
+  const btn=$i('fullscreen-btn');if(!btn)return;
+  const inFS=!!(document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement);
+  btn.innerHTML=inFS
+    ?'<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/></svg>Exit Full'
+    :'<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>Full';
+}
+document.addEventListener('fullscreenchange',updateFullscreenIcon);
+document.addEventListener('webkitfullscreenchange',updateFullscreenIcon);
+document.addEventListener('mozfullscreenchange',updateFullscreenIcon);
+document.addEventListener('MSFullscreenChange',updateFullscreenIcon);
+$i('fullscreen-btn').addEventListener('click',toggleFullscreen);
 $i('proj-bg-btn').addEventListener('click',cycleProjBg);
 if($i('proj-color-picker')) { $i('proj-color-picker').addEventListener('input', function(e) { const p=$i('projection'); p.classList.remove(...BG_CLASSES); p.style.background=e.target.value; }); }
 $i('next-stanza').addEventListener('click',nextSlide);
@@ -1695,52 +1753,89 @@ function showSyncBanner(msg){
 }
 
 async function syncHymnsFromGithub(){
-  showSyncBanner('Syncing library & banners…');
+  showSyncBanner('Syncing library…');
   try{
-    const lastSync=localStorage.getItem('lh_last_sync')||'0';
     const res=await fetch(HYMNS_URL+'?t='+Date.now(),{cache:'no-cache'});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
-    
-    // Auto-Sync Banners from Admin
-    if(data.bannerSlides && Array.isArray(data.bannerSlides)){
-      bannerSlides = data.bannerSlides;
+
+    // Full replace banners from remote (admin is the source of truth)
+    if(data.bannerSlides&&Array.isArray(data.bannerSlides)){
+      bannerSlides=data.bannerSlides;
       renderBanner();
-      if($i('banner-modal').classList.contains('open')) renderBannerList();
+      if($i('banner-modal').classList.contains('open'))renderBannerList();
     }
 
+    // Full replace hymns from remote — this ensures deletes and edits propagate
     const remoteHymns=data.hymns||[];
-    if(!remoteHymns.length){showSyncBanner(null);return;}
-    let added=0,updated=0;
-    remoteHymns.forEach(rh=>{
-      const existing=hymns.find(h=>h.id===rh.id);
-      if(!existing){
-        hymns.push(rh);
-        added++;
-      } else {
-        const remoteKeys=Object.keys(rh).length;
-        const localKeys=Object.keys(existing).length;
-        if(remoteKeys>localKeys){
-          Object.assign(existing,rh);
-          updated++;
-        }
-      }
-    });
-    if(added||updated || data.bannerSlides){
-      save();
-      renderBookGrid();
-      updateHymnCount();
-      if(currentBook)renderHymnGrid();
+    if(remoteHymns.length){
+      // Preserve local-only favourites before replacing
+      const favMap={};
+      hymns.forEach(h=>{if(h.favourite)favMap[h.id]=true;});
+      hymns=remoteHymns.map(h=>favMap[h.id]?{...h,favourite:true}:h);
     }
+
+    // Clean up repItems that reference hymns no longer in library
+    repItems=repItems.filter(i=>i.itemType==='segment'||i.itemType==='announcement'||hymns.some(h=>h.id===i.hymnId));
+
+    try{save();}catch(qe){
+      // If localStorage quota exceeded, clear old hymns and retry
+      localStorage.removeItem('lh_hymns');
+      try{localStorage.setItem('lh_hymns',JSON.stringify(hymns));}catch(e2){}
+    }
+    renderBookGrid();
+    updateHymnCount();
+    if(currentBook)renderHymnGrid();
+
     localStorage.setItem('lh_last_sync',Date.now().toString());
-    const msg=added||updated?'Synced: '+added+' new'+(updated?' · '+updated+' updated':''):'Library up to date';
-    showSyncBanner(msg);
+    showSyncBanner('Library up to date');
     setTimeout(()=>showSyncBanner(null),3000);
   }catch(e){
-    showSyncBanner('Offline — using local library');
+    showSyncBanner('Offline — using saved library');
     setTimeout(()=>showSyncBanner(null),3000);
   }
 }
+
+// ── ADMIN PUBLISH BUTTON ─────────────────────────────────────────────
+// Exports hymns.json so admin can upload it to GitHub and push to all users
+function exportAndPublish(){
+  const payload={hymns:hymns,bannerSlides:bannerSlides};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='hymns.json';a.click();
+  URL.revokeObjectURL(url);
+  toast('hymns.json downloaded — now upload it to GitHub to publish changes to all users','info');
+}
+if(isAdmin){
+  const pb=$i('publish-btn');
+  if(pb){pb.style.display='inline-flex';pb.addEventListener('click',exportAndPublish);}
+}
+
+// ── DONATE HOME CARD ─────────────────────────────────────────────────
+(function(){
+  const sel=$i('donate-amount-select');
+  const customInput=$i('donate-custom-input');
+  const btn=$i('donate-home-btn');
+  const eftBox=$i('donate-eft-box');
+  if(!sel||!btn)return;
+
+  sel.addEventListener('change',function(){
+    customInput.style.display=this.value==='custom'?'inline-block':'none';
+    if(this.value!=='custom')customInput.value='';
+  });
+
+  btn.addEventListener('click',function(){
+    const selVal=sel.value;
+    const amount=selVal==='custom'?customInput.value.trim():selVal;
+    if(!amount){toast('Please choose or enter a donation amount first','error');return;}
+    // Show EFT banking details (replace with a PayFast/payment link if you have one)
+    eftBox.style.display=eftBox.style.display==='none'?'block':'none';
+    if(eftBox.style.display==='block'){
+      toast('Banking details shown below — thank you for your generosity!','success');
+    }
+  });
+})();
 
 renderBanner();
 renderBookGrid();
