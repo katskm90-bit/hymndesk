@@ -1784,7 +1784,10 @@ function showSyncBanner(msg){
 async function syncHymnsFromGithub(){
   showSyncBanner('Syncing library…');
   try{
-    const res=await fetch(HYMNS_URL+'?t='+Date.now(),{cache:'no-cache'});
+    const res=await fetch(HYMNS_URL+'?t='+Date.now(),{
+      cache:'no-store',
+      headers:{'pragma':'no-cache','cache-control':'no-cache, no-store, must-revalidate'}
+    });
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     if(data.bannerSlides&&Array.isArray(data.bannerSlides)){
@@ -2030,6 +2033,9 @@ renderBanner();
 renderBookGrid();
 renderDonateCard();
 syncHymnsFromGithub();
+// Run a second sync 4 seconds after load — catches cases where the first sync
+// ran before stale service workers or caches were cleared
+setTimeout(syncHymnsFromGithub, 4000);
 
 // Run access controls and header render after all UI binds are ready
 applyAccessControls();
@@ -2039,11 +2045,23 @@ renderHeaderYtLink();
 </body>
 </html>
 <script>
+  // Unregister any existing service workers — they can intercept and cache
+  // hymns.json updates, preventing users from receiving published changes.
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js')
-        .then(reg => console.log('SW registered:', reg.scope))
-        .catch(err => console.log('SW error:', err));
+    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+      for (var reg of registrations) {
+        reg.unregister();
+        console.log('Service worker unregistered:', reg.scope);
+      }
     });
+    // Clear all caches so stale hymns.json is not served
+    if (window.caches) {
+      caches.keys().then(function(names) {
+        for (var name of names) {
+          caches.delete(name);
+          console.log('Cache cleared:', name);
+        }
+      });
+    }
   }
 </script>
