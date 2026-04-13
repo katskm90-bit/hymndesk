@@ -1877,21 +1877,40 @@ function renderDonateCard() {
 }
 
 function openDonateEditModal() {
-  $i('dc-icon-input').value  = infoData.donateIcon  || '';
-  $i('dc-title-input').value = infoData.donateTitle || 'Support This Ministry';
-  $i('dc-text-input').value  = infoData.donateText  || '';
-  $i('dc-visible-yes').checked = infoData.donateVisible !== false;
-  $i('dc-visible-no').checked  = infoData.donateVisible === false;
-  openModal('donate-edit-modal');
+  // Use document.getElementById directly to ensure hidden modal fields are found
+  var iconEl   = document.getElementById('dc-icon-input');
+  var titleEl  = document.getElementById('dc-title-input');
+  var textEl   = document.getElementById('dc-text-input');
+  var visYes   = document.getElementById('dc-visible-yes');
+  var visNo    = document.getElementById('dc-visible-no');
+  var modal    = document.getElementById('donate-edit-modal');
+  if (iconEl)  iconEl.value   = infoData.donateIcon  || '';
+  if (titleEl) titleEl.value  = infoData.donateTitle || 'Support This Ministry';
+  if (textEl)  textEl.value   = infoData.donateText  || '';
+  if (visYes)  visYes.checked = infoData.donateVisible !== false;
+  if (visNo)   visNo.checked  = infoData.donateVisible === false;
+  if (modal)   modal.classList.add('open');
 }
 
-on('close-donate-edit-modal', 'click', function() { closeModal('donate-edit-modal'); });
-on('dc-cancel-btn', 'click', function() { closeModal('donate-edit-modal'); });
+on('close-donate-edit-modal', 'click', function() {
+  var m = document.getElementById('donate-edit-modal');
+  if (m) m.classList.remove('open');
+});
+on('dc-cancel-btn', 'click', function() {
+  var m = document.getElementById('donate-edit-modal');
+  if (m) m.classList.remove('open');
+});
 on('dc-save-btn', 'click', function() {
-  var icon    = $i('dc-icon-input').value.trim();
-  var title   = $i('dc-title-input').value.trim();
-  var text    = $i('dc-text-input').value.trim();
-  var visible = $i('dc-visible-yes').checked;
+  // Use document.getElementById directly — bypasses the _noop proxy
+  // so hidden modal inputs are always read correctly
+  var iconEl    = document.getElementById('dc-icon-input');
+  var titleEl   = document.getElementById('dc-title-input');
+  var textEl    = document.getElementById('dc-text-input');
+  var visibleEl = document.getElementById('dc-visible-yes');
+  var icon    = iconEl    ? iconEl.value.trim()    : '';
+  var title   = titleEl   ? titleEl.value.trim()   : '';
+  var text    = textEl    ? textEl.value.trim()    : '';
+  var visible = visibleEl ? visibleEl.checked      : true;
   if (!title) { toast('Please enter a heading for the card', 'error'); return; }
   infoData.donateIcon    = icon || '&#x1F64F;';
   infoData.donateTitle   = title;
@@ -1899,8 +1918,8 @@ on('dc-save-btn', 'click', function() {
   infoData.donateVisible = visible;
   save();
   renderDonateCard();
-  closeModal('donate-edit-modal');
-  toast('Support card updated — click Publish to push to all users', 'success');
+  document.getElementById('donate-edit-modal').classList.remove('open');
+  toast('Support card updated', 'success');
 });
 
 renderBanner();
