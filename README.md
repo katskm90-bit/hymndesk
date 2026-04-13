@@ -1,1 +1,1 @@
-# lyric-hub
+# HymnDesk
