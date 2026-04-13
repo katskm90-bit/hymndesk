@@ -130,7 +130,7 @@
   <div class="header-right">
     <span class="hymn-count" id="hymn-count">0 hymns</span>
     <button class="btn btn-amber" id="backup-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>Backup</button>
-    <button class="btn btn-green" id="publish-btn" style="display:none" title="Export hymns.json and upload to GitHub to push changes to all users"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12"/></svg>Publish</button>
+    <button class="btn btn-green" id="publish-btn" style="display:none"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12"/></svg>Publish</button>
     <button class="btn btn-blue" id="rep-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Repertoires</button>
     <button class="btn btn-teal" id="app-info-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>Info</button>
     <button class="btn btn-green" id="add-hymn-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>Add Hymn</button>
@@ -150,8 +150,7 @@
     <h2>Hymn Books</h2>
     <button class="btn btn-ghost" id="manage-banner-btn-2"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>Manage Banner</button>
   </div>
-
-  <!-- Donate Card — rendered dynamically -->
+  <!-- Donate card — rendered by renderDonateCard() -->
   <div id="donate-home-card" style="margin:0 24px 20px;"></div>
   <div class="book-grid" id="book-grid"></div>
   <div class="empty-state" id="home-empty" style="display:none">
@@ -615,11 +614,10 @@ let infoData = JSON.parse(localStorage.getItem('lh_info')) || {
     about: "Brief explanation of project and its purpose",
     contact: "Contact number: 011 568 2792\nEmail address: info@serenzadeluxeatelier.co.za"
 };
-// Ensure donate card fields exist on old saved data too
-if (!infoData.donateIcon)    infoData.donateIcon    = '&#x1F64F;';
-if (!infoData.donateTitle)   infoData.donateTitle   = 'Support This Ministry';
-if (!infoData.donateText)    infoData.donateText    = 'Your contribution keeps this hymn library free and growing for everyone.';
-if (infoData.donateVisible === undefined) infoData.donateVisible = true;
+if(!infoData.donateIcon)    infoData.donateIcon    = '&#x1F4B5;';
+if(!infoData.donateTitle)   infoData.donateTitle   = 'Support This Ministry';
+if(!infoData.donateText)    infoData.donateText    = 'Your contribution keeps this hymn library free and growing for everyone.';
+if(infoData.donateVisible===undefined) infoData.donateVisible = true;
 let feedbackList = JSON.parse(localStorage.getItem('lh_feedback')) || [];
 
 load();
@@ -794,21 +792,21 @@ let projFontSize=window.innerWidth<=480?26:48,projBgIndex=0;
 let bannerTimer=null,bannerCurrent=0;
 let nextId=Date.now();
 function uid(){return 'id_'+(nextId++);}
-// Null-safe DOM helpers — never crash if an element is missing
+// Null-safe DOM helpers
 var _noop = new Proxy({}, {
-  get: function(t, k) {
-    if (k === 'addEventListener' || k === 'removeEventListener') return function(){};
-    if (k === 'classList') return {add:function(){},remove:function(){},toggle:function(){},contains:function(){return false;}};
-    if (k === 'style') return new Proxy({}, {set:function(){return true;},get:function(){return '';}});
-    if (k === 'focus' || k === 'click' || k === 'blur') return function(){};
+  get: function(t,k){
+    if(k==='addEventListener'||k==='removeEventListener')return function(){};
+    if(k==='classList')return{add:function(){},remove:function(){},toggle:function(){},contains:function(){return false;}};
+    if(k==='style')return new Proxy({},{set:function(){return true;},get:function(){return '';}});
+    if(k==='focus'||k==='click'||k==='blur')return function(){};
     return '';
   },
-  set: function(t, k, v) { return true; }
+  set:function(t,k,v){return true;}
 });
-function $i(id){return document.getElementById(id) || _noop;}
+function $i(id){return document.getElementById(id)||_noop;}
 function on(id,evt,fn){var el=document.getElementById(id);if(el)el.addEventListener(evt,fn);}
-function openModal(id){var el=$i(id);if(el&&el!==_noop)el.classList.add('open');}
-function closeModal(id){var el=$i(id);if(el&&el!==_noop)el.classList.remove('open');}
+function openModal(id){var el=document.getElementById(id);if(el)el.classList.add('open');}
+function closeModal(id){var el=document.getElementById(id);if(el)el.classList.remove('open');}
 function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function toast(msg,type='info'){
   const el=document.createElement('div');el.className='toast toast-'+type;
@@ -1251,33 +1249,26 @@ let swX=0;
 on('projection', 'touchstart',e=>{swX=e.touches[0].clientX;},{passive:true});
 on('projection', 'touchend',e=>{const dx=e.changedTouches[0].clientX-swX;if(Math.abs(dx)>44){if(dx<0)nextSlide();else prevSlide();}},{passive:true});
 on('exit-proj', 'click',exitProjection);
-// Cross-device fullscreen (iOS Safari does not support the Fullscreen API)
 function toggleFullscreen(){
-  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
-  const isSafari=/^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  if(isIOS||(isSafari&&!document.fullscreenElement)){
-    toast('On iPhone/iPad: tap Share ➜ Add to Home Screen, then open from there for full-screen','info');
-    return;
-  }
-  const el=document.documentElement;
-  const requestFS=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
-  const exitFS=document.exitFullscreen||document.webkitExitFullscreen||document.mozCancelFullScreen||document.msExitFullscreen;
-  const inFS=document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement;
-  if(!inFS){if(requestFS)requestFS.call(el).catch(()=>toast('Fullscreen not available on this device','error'));}
-  else{if(exitFS)exitFS.call(document).catch(()=>{});}
+  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+  if(isIOS){toast('On iPhone: tap Share then Add to Home Screen for fullscreen','info');return;}
+  var el=document.documentElement;
+  var reqFS=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+  var exFS=document.exitFullscreen||document.webkitExitFullscreen||document.mozCancelFullScreen||document.msExitFullscreen;
+  var inFS=document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement;
+  if(!inFS){if(reqFS)reqFS.call(el).catch(function(){toast('Fullscreen not available on this device','error');});}
+  else{if(exFS)exFS.call(document);}
 }
-function updateFullscreenIcon(){
-  const btn=$i('fullscreen-btn');if(!btn)return;
-  const inFS=!!(document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement);
-  btn.innerHTML=inFS
-    ?'<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/></svg>Exit Full'
-    :'<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>Full';
-}
-document.addEventListener('fullscreenchange',updateFullscreenIcon);
-document.addEventListener('webkitfullscreenchange',updateFullscreenIcon);
-document.addEventListener('mozfullscreenchange',updateFullscreenIcon);
-document.addEventListener('MSFullscreenChange',updateFullscreenIcon);
-on('fullscreen-btn', 'click',toggleFullscreen);
+['fullscreenchange','webkitfullscreenchange','mozfullscreenchange'].forEach(function(ev){
+  document.addEventListener(ev,function(){
+    var b=document.getElementById('fullscreen-btn');if(!b)return;
+    var inFS=!!(document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement);
+    b.innerHTML=inFS
+      ?'<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/></svg>Exit Full'
+      :'<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>Full';
+  });
+});
+on('fullscreen-btn','click',toggleFullscreen);
 on('proj-bg-btn', 'click',cycleProjBg);
 if($i('proj-color-picker')) { on('proj-color-picker', 'input', function(e) { const p=$i('projection'); p.classList.remove(...BG_CLASSES); p.style.background=e.target.value; }); }
 on('next-stanza', 'click',nextSlide);
@@ -1731,35 +1722,21 @@ async function syncHymnsFromGithub(){
     const res=await fetch(HYMNS_URL+'?t='+Date.now(),{cache:'no-cache'});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
-
-    // Full replace banners from remote (admin is the source of truth)
     if(data.bannerSlides&&Array.isArray(data.bannerSlides)){
       bannerSlides=data.bannerSlides;
       renderBanner();
-      if($i('banner-modal').classList.contains('open'))renderBannerList();
     }
-
-    // Full replace hymns from remote — this ensures deletes and edits propagate
     const remoteHymns=data.hymns||[];
     if(remoteHymns.length){
-      // Preserve local-only favourites before replacing
       const favMap={};
       hymns.forEach(h=>{if(h.favourite)favMap[h.id]=true;});
       hymns=remoteHymns.map(h=>favMap[h.id]?{...h,favourite:true}:h);
     }
-
-    // Clean up repItems that reference hymns no longer in library
     repItems=repItems.filter(i=>i.itemType==='segment'||i.itemType==='announcement'||hymns.some(h=>h.id===i.hymnId));
-
-    try{save();}catch(qe){
-      // If localStorage quota exceeded, clear old hymns and retry
-      localStorage.removeItem('lh_hymns');
-      try{localStorage.setItem('lh_hymns',JSON.stringify(hymns));}catch(e2){}
-    }
+    try{save();}catch(qe){localStorage.removeItem('lh_hymns');try{localStorage.setItem('lh_hymns',JSON.stringify(hymns));}catch(e2){}}
     renderBookGrid();
     updateHymnCount();
     if(currentBook)renderHymnGrid();
-
     localStorage.setItem('lh_last_sync',Date.now().toString());
     showSyncBanner('Library up to date — '+hymns.length+' hymns loaded');
     setTimeout(()=>showSyncBanner(null),4000);
@@ -1769,70 +1746,58 @@ async function syncHymnsFromGithub(){
   }
 }
 
-// ── ADMIN PUBLISH BUTTON ─────────────────────────────────────────────
-// Exports hymns.json so admin can upload it to GitHub and push to all users
+// ── PUBLISH BUTTON (admin only) ──────────────────────────────────────
 function exportAndPublish(){
-  // Safety check: never export if hymns list is empty — prevents wiping all user devices
   if(!hymns||hymns.length===0){
-    alert('⚠️ Cannot publish — the hymn library is empty in memory right now.\n\nThis usually means the page has not finished syncing yet.\n\nPlease wait 10 seconds and try again. If it still shows empty, refresh the page and log in as admin again before clicking Publish.');
+    alert('Cannot publish — hymn library is empty in memory.\n\nWait 10 seconds for sync to complete, then try again.');
     return;
   }
-  const confirmed=confirm('You are about to publish '+hymns.length+' hymns to all users.\n\nThis will overwrite what all user devices see.\n\nAre you sure you want to continue?');
-  if(!confirmed)return;
-  const payload={hymns:hymns,bannerSlides:bannerSlides};
-  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
+  if(!confirm('Publish '+hymns.length+' hymns to all users?\n\nThis overwrites what all devices see. Continue?'))return;
+  var payload={hymns:hymns,bannerSlides:bannerSlides};
+  var blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
   a.href=url;a.download='hymns.json';a.click();
   URL.revokeObjectURL(url);
-  toast('hymns.json exported with '+hymns.length+' hymns — now upload to GitHub to publish to all users','info');
+  toast('hymns.json downloaded ('+hymns.length+' hymns) — upload to GitHub to publish','info');
 }
-if(isAdmin){
-  const pb=$i('publish-btn');
-  if(pb){pb.style.display='inline-flex';pb.addEventListener('click',exportAndPublish);}
-}
+(function(){
+  var pb=document.getElementById('publish-btn');
+  if(pb&&isAdmin){pb.style.display='inline-flex';pb.addEventListener('click',exportAndPublish);}
+})();
 
 // ── DONATE HOME CARD ─────────────────────────────────────────────────
-
-function renderDonateCard() {
-  var card = $i('donate-home-card');
-  if (!card) return;
-
-  // If hidden by admin: users see nothing, admin sees a dashed placeholder
-  if (!infoData.donateVisible) {
-    if (isAdmin) {
-      card.innerHTML = '<div style="border:2px dashed #e2e8f0;border-radius:16px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;">'
-        + '<span style="font-size:12px;color:#94a3b8;font-style:italic;">Support card is hidden from users</span>'
-        + '<button class="btn btn-ghost" id="donate-edit-btn" style="font-size:12px;padding:5px 10px;">Edit Card</button>'
-        + '</div>';
-      on('donate-edit-btn', 'click', openDonateEditModal);
-    } else {
-      card.innerHTML = '';
-    }
+function renderDonateCard(){
+  var card=document.getElementById('donate-home-card');
+  if(!card)return;
+  if(!infoData.donateVisible){
+    card.innerHTML=isAdmin
+      ?'<div style="border:2px dashed #e2e8f0;border-radius:16px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;">'
+        +'<span style="font-size:12px;color:#94a3b8;font-style:italic;">Support card is hidden from users</span>'
+        +'<button onclick="openDonateEditModal()" style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:#475569;cursor:pointer;">Edit Card</button>'
+        +'</div>'
+      :'';
     return;
   }
-
-  var icon  = infoData.donateIcon  || '&#x1F64F;';
+  var icon  = infoData.donateIcon  || '&#x1F4B5;';
   var title = infoData.donateTitle || 'Support This Ministry';
   var text  = infoData.donateText  || 'Your contribution keeps this hymn library free and growing for everyone.';
-
   var editBtn = isAdmin
-    ? '<button id="donate-edit-btn" title="Edit this card (admin only)" style="position:absolute;top:10px;right:10px;background:#fff;border:1px solid #FFD9B8;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:600;color:#C05A08;cursor:pointer;">Edit Card</button>'
+    ? '<button onclick="openDonateEditModal()" style="position:absolute;top:10px;right:10px;background:#fff;border:1px solid #FFD9B8;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:600;color:#C05A08;cursor:pointer;">Edit Card</button>'
     : '';
-
   card.innerHTML =
     '<div style="background:linear-gradient(135deg,#FFF8F3,#FFF0E6);border:2px solid #FFD9B8;border-radius:16px;padding:18px 20px;position:relative;">'
     + editBtn
-    + '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;' + (isAdmin ? 'padding-right:90px;' : '') + '">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;">'
     +   '<div style="flex:1;min-width:180px;">'
     +     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">'
-    +       '<span style="font-size:22px;">' + icon + '</span>'
-    +       '<span style="font-family:\'Playfair Display\',serif;font-size:16px;font-weight:700;color:#1e293b;">' + title + '</span>'
+    +       '<span style="font-size:22px;">'+icon+'</span>'
+    +       '<span style="font-family:&quot;Playfair Display&quot;,serif;font-size:16px;font-weight:700;color:#1e293b;">'+title+'</span>'
     +     '</div>'
-    +     '<div style="font-size:12px;color:#64748b;line-height:1.5;">' + text + '</div>'
+    +     '<div style="font-size:12px;color:#64748b;line-height:1.5;">'+text+'</div>'
     +   '</div>'
     +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-    +     '<select id="donate-amount-select" style="padding:8px 10px;border:1px solid #FFD9B8;border-radius:8px;background:#fff;color:#1e293b;font-size:13px;font-weight:600;outline:none;cursor:pointer;-webkit-appearance:auto;">'
+    +     '<select id="donate-amount-select" style="padding:8px 10px;border:1px solid #FFD9B8;border-radius:8px;background:#fff;color:#1e293b;font-size:13px;font-weight:600;outline:none;cursor:pointer;">'
     +       '<option value="">Choose amount</option>'
     +       '<option value="20">R20</option>'
     +       '<option value="50">R50</option>'
@@ -1841,86 +1806,70 @@ function renderDonateCard() {
     +       '<option value="500">R500</option>'
     +       '<option value="custom">Other amount...</option>'
     +     '</select>'
-    +     '<input type="number" id="donate-custom-input" placeholder="Amount (R)" min="1" style="display:none;width:130px;padding:8px 10px;border:1px solid #FFD9B8;border-radius:8px;background:#fff;color:#1e293b;font-size:13px;outline:none;">'
-    +     '<button class="btn btn-purple" id="donate-home-btn" style="padding:9px 18px;font-size:13px;">&#x2764; Donate</button>'
+    +     '<input type="number" id="donate-custom-input" placeholder="Amount (R)" min="1" style="display:none;width:120px;padding:8px 10px;border:1px solid #FFD9B8;border-radius:8px;background:#fff;color:#1e293b;font-size:13px;outline:none;">'
+    +     '<button id="donate-home-btn" style="padding:9px 18px;font-size:13px;background:linear-gradient(135deg,#E8650A,#d45a08);color:#fff;border:none;border-radius:9px;font-weight:600;cursor:pointer;">&#x2764; Donate</button>'
     +   '</div>'
     + '</div>'
-    + '<div id="donate-eft-box" style="display:none;margin-top:14px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;font-size:13px;color:#166534;line-height:1.9;">'
-    +   '<strong>Bank:</strong> FNB &nbsp;|&nbsp; <strong>Account Name:</strong> Serenza Deluxe Atelier<br>'
-    +   '<strong>Account No:</strong> 62864862852 &nbsp;|&nbsp; <strong>Branch Code:</strong> 250 655<br>'
-    +   '<span style="font-size:11px;color:#059669;">Use your name as the payment reference. Thank you!</span>'
-    + '</div>'
     + '</div>';
-
-  // Bind admin edit button
-  if (isAdmin && $i('donate-edit-btn')) {
-    on('donate-edit-btn', 'click', openDonateEditModal);
-  }
-
-  // Bind amount selector
-  var sel         = $i('donate-amount-select');
-  var customInput = $i('donate-custom-input');
-  var btn         = $i('donate-home-btn');
-  var eftBox      = $i('donate-eft-box');
-
-  sel.addEventListener('change', function() {
-    customInput.style.display = this.value === 'custom' ? 'inline-block' : 'none';
-    if (this.value !== 'custom') customInput.value = '';
+  var sel=document.getElementById('donate-amount-select');
+  var customInput=document.getElementById('donate-custom-input');
+  var btn=document.getElementById('donate-home-btn');
+  if(sel)sel.addEventListener('change',function(){
+    customInput.style.display=this.value==='custom'?'inline-block':'none';
+    if(this.value!=='custom')customInput.value='';
   });
-
-  btn.addEventListener('click', function() {
-    var amount = sel.value === 'custom' ? customInput.value.trim() : sel.value;
-    if (!amount) { toast('Please choose or enter a donation amount first', 'error'); return; }
-    eftBox.style.display = eftBox.style.display === 'none' ? 'block' : 'none';
-    if (eftBox.style.display === 'block') toast('Banking details shown below — thank you for your generosity!', 'success');
+  if(btn)btn.addEventListener('click',function(){
+    var amount=sel&&sel.value==='custom'?customInput.value.trim():sel?sel.value:'';
+    if(!amount){alert('Please choose or enter a donation amount first.');return;}
+    // PayFast donation URL — amount passed as parameter
+    var payfastUrl='https://www.payfast.co.za/donate/go/serenzadeluxeatelier?amount='+encodeURIComponent(amount);
+    window.open(payfastUrl,'_blank');
   });
 }
 
-function openDonateEditModal() {
-  // Use document.getElementById directly to ensure hidden modal fields are found
-  var iconEl   = document.getElementById('dc-icon-input');
-  var titleEl  = document.getElementById('dc-title-input');
-  var textEl   = document.getElementById('dc-text-input');
-  var visYes   = document.getElementById('dc-visible-yes');
-  var visNo    = document.getElementById('dc-visible-no');
-  var modal    = document.getElementById('donate-edit-modal');
-  if (iconEl)  iconEl.value   = infoData.donateIcon  || '';
-  if (titleEl) titleEl.value  = infoData.donateTitle || 'Support This Ministry';
-  if (textEl)  textEl.value   = infoData.donateText  || '';
-  if (visYes)  visYes.checked = infoData.donateVisible !== false;
-  if (visNo)   visNo.checked  = infoData.donateVisible === false;
-  if (modal)   modal.classList.add('open');
+function openDonateEditModal(){
+  var modal=document.getElementById('donate-edit-modal');
+  var iconEl=document.getElementById('dc-icon-input');
+  var titleEl=document.getElementById('dc-title-input');
+  var textEl=document.getElementById('dc-text-input');
+  var visYes=document.getElementById('dc-visible-yes');
+  var visNo=document.getElementById('dc-visible-no');
+  if(iconEl)  iconEl.value   = infoData.donateIcon  || '';
+  if(titleEl) titleEl.value  = infoData.donateTitle || 'Support This Ministry';
+  if(textEl)  textEl.value   = infoData.donateText  || '';
+  if(visYes)  visYes.checked = infoData.donateVisible!==false;
+  if(visNo)   visNo.checked  = infoData.donateVisible===false;
+  if(modal)   modal.classList.add('open');
 }
 
-on('close-donate-edit-modal', 'click', function() {
-  var m = document.getElementById('donate-edit-modal');
-  if (m) m.classList.remove('open');
-});
-on('dc-cancel-btn', 'click', function() {
-  var m = document.getElementById('donate-edit-modal');
-  if (m) m.classList.remove('open');
-});
-on('dc-save-btn', 'click', function() {
-  // Use document.getElementById directly — bypasses the _noop proxy
-  // so hidden modal inputs are always read correctly
-  var iconEl    = document.getElementById('dc-icon-input');
-  var titleEl   = document.getElementById('dc-title-input');
-  var textEl    = document.getElementById('dc-text-input');
-  var visibleEl = document.getElementById('dc-visible-yes');
-  var icon    = iconEl    ? iconEl.value.trim()    : '';
-  var title   = titleEl   ? titleEl.value.trim()   : '';
-  var text    = textEl    ? textEl.value.trim()    : '';
-  var visible = visibleEl ? visibleEl.checked      : true;
-  if (!title) { toast('Please enter a heading for the card', 'error'); return; }
-  infoData.donateIcon    = icon || '&#x1F64F;';
-  infoData.donateTitle   = title;
-  infoData.donateText    = text;
-  infoData.donateVisible = visible;
-  save();
-  renderDonateCard();
-  document.getElementById('donate-edit-modal').classList.remove('open');
-  toast('Support card updated', 'success');
-});
+(function(){
+  var saveBtn   = document.getElementById('dc-save-btn');
+  var cancelBtn = document.getElementById('dc-cancel-btn');
+  var closeBtn  = document.getElementById('close-donate-edit-modal');
+  var modal     = document.getElementById('donate-edit-modal');
+  function closeDonateModal(){ if(modal) modal.classList.remove('open'); }
+  if(closeBtn)  closeBtn.addEventListener('click',  closeDonateModal);
+  if(cancelBtn) cancelBtn.addEventListener('click', closeDonateModal);
+  if(saveBtn) saveBtn.addEventListener('click', function(){
+    var iconEl  = document.getElementById('dc-icon-input');
+    var titleEl = document.getElementById('dc-title-input');
+    var textEl  = document.getElementById('dc-text-input');
+    var visYes  = document.getElementById('dc-visible-yes');
+    var icon    = iconEl  ? iconEl.value.trim()  : '';
+    var title   = titleEl ? titleEl.value.trim() : '';
+    var text    = textEl  ? textEl.value.trim()  : '';
+    var visible = visYes  ? visYes.checked       : true;
+    if(!title){ alert('Please enter a heading for the card.'); return; }
+    infoData.donateIcon    = icon || '&#x1F4B5;';
+    infoData.donateTitle   = title;
+    infoData.donateText    = text;
+    infoData.donateVisible = visible;
+    save();
+    renderDonateCard();
+    closeDonateModal();
+    toast('Support card updated','success');
+  });
+})();
 
 renderBanner();
 renderBookGrid();
@@ -1937,25 +1886,25 @@ renderHeaderYtLink();
   <div class="modal-box narrow">
     <button class="modal-close" id="close-donate-edit-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
     <h2 class="modal-title">Edit Support Card</h2>
-    <p class="modal-sub">Changes are saved locally. Click Publish after saving to push to all users.</p>
+    <p class="modal-sub">Changes saved here. Click Publish to push to all users.</p>
     <div class="form-group">
-      <label class="fl">Icon (paste any emoji here)</label>
-      <input type="text" id="dc-icon-input" maxlength="8" placeholder="e.g. heart, music note" style="font-size:22px;text-align:center;width:80px;padding:8px;">
-      <p style="font-size:11px;color:#94a3b8;margin-top:5px;">Examples: &#x1F64F; &#x2764;&#xFE0F; &#x1F3B5; &#x1F31F; &#x271D;&#xFE0F; &#x1F4D6;</p>
+      <label class="fl">Icon (paste any emoji or HTML code)</label>
+      <input type="text" id="dc-icon-input" maxlength="10" placeholder="&#x1F4B5;" style="font-size:22px;text-align:center;width:90px;padding:8px;">
+      <p style="font-size:11px;color:#94a3b8;margin-top:5px;">Tip: type &#x1F4B5; for &#x1F4B5; &nbsp; &#x2764;&#xFE0F; for &#x2764;&#xFE0F; &nbsp; &#x1F3B5; for &#x1F3B5;</p>
     </div>
     <div class="form-group">
       <label class="fl">Heading</label>
       <input type="text" id="dc-title-input" maxlength="60" placeholder="Support This Ministry">
     </div>
     <div class="form-group">
-      <label class="fl">Description (shown below the heading)</label>
+      <label class="fl">Description</label>
       <textarea id="dc-text-input" class="fi" rows="3" placeholder="Your contribution keeps this hymn library free and growing for everyone."></textarea>
     </div>
     <div class="form-group">
-      <label class="fl">Card visibility</label>
+      <label class="fl">Visibility</label>
       <div class="radio-row">
-        <label><input type="radio" name="dc-visible" id="dc-visible-yes" value="yes"> Show card on home screen</label>
-        <label><input type="radio" name="dc-visible" id="dc-visible-no" value="no"> Hide card from users</label>
+        <label><input type="radio" name="dc-visible" id="dc-visible-yes" value="yes"> Show on home screen</label>
+        <label><input type="radio" name="dc-visible" id="dc-visible-no" value="no"> Hide from users</label>
       </div>
     </div>
     <div class="action-row">
