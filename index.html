@@ -669,14 +669,15 @@ html.dark select.fi option{background:var(--card);color:var(--text)}
 
 <!-- Admin: Edit Donate Card Modal -->
 <div class="modal-overlay" id="donate-edit-modal">
-  <div class="modal-box narrow">
+  <div class="modal-box" style="max-width:520px">
     <button class="modal-close" id="close-donate-edit-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
-    <h2 class="modal-title">Edit Support Card</h2>
-    <p class="modal-sub">Changes saved here. Click Publish to push to all users.</p>
+    <h2 class="modal-title">Support Card &amp; PayFast Settings</h2>
+    <p class="modal-sub">Admin only. Changes saved here — click Publish to push card text to all users. PayFast credentials are stored on this device only.</p>
+
+    <p class="section-label">Card display</p>
     <div class="form-group">
-      <label class="fl">Icon (paste any emoji or HTML code)</label>
-      <input type="text" id="dc-icon-input" maxlength="10" placeholder="&#x1F4B5;" style="font-size:22px;text-align:center;width:90px;padding:8px;">
-      <p style="font-size:11px;color:var(--text4);margin-top:5px;">Tip: type &#x1F4B5; for &#x1F4B5; &nbsp; &#x2764;&#xFE0F; for &#x2764;&#xFE0F; &nbsp; &#x1F3B5; for &#x1F3B5;</p>
+      <label class="fl">Icon</label>
+      <input type="text" id="dc-icon-input" maxlength="10" placeholder="&#x1F4B5;" style="font-size:20px;text-align:center;width:72px;padding:7px;">
     </div>
     <div class="form-group">
       <label class="fl">Heading</label>
@@ -684,7 +685,7 @@ html.dark select.fi option{background:var(--card);color:var(--text)}
     </div>
     <div class="form-group">
       <label class="fl">Description</label>
-      <textarea id="dc-text-input" class="fi" rows="3" placeholder="Your contribution keeps this hymn library free and growing for everyone."></textarea>
+      <textarea id="dc-text-input" class="fi" rows="2" placeholder="Your contribution keeps this hymn library free and growing for everyone."></textarea>
     </div>
     <div class="form-group">
       <label class="fl">Visibility</label>
@@ -693,9 +694,47 @@ html.dark select.fi option{background:var(--card);color:var(--text)}
         <label><input type="radio" name="dc-visible" id="dc-visible-no" value="no"> Hide from users</label>
       </div>
     </div>
+
+    <hr class="section-divider">
+    <p class="section-label">PayFast payment credentials</p>
+    <div style="padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:11.5px;color:#166534;margin-bottom:12px;line-height:1.6;">
+      Find your credentials in your PayFast account under <strong>Settings &rarr; Developer Settings</strong>. These are stored only on this device and never published to GitHub or shown to users.
+    </div>
+    <div class="form-row">
+      <div>
+        <label class="fl">Merchant ID *</label>
+        <input type="text" id="pf-merchant-id" placeholder="e.g. 10000100" autocomplete="off">
+      </div>
+      <div>
+        <label class="fl">Merchant Key *</label>
+        <input type="text" id="pf-merchant-key" placeholder="e.g. 46f0cd694581a" autocomplete="off">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="fl">Passphrase <span style="font-weight:400;color:var(--text4);text-transform:none;letter-spacing:0">(if set on your PayFast account)</span></label>
+      <input type="password" id="pf-passphrase" placeholder="Your PayFast passphrase" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="fl">Item name shown on PayFast checkout</label>
+      <input type="text" id="pf-item-name" placeholder="e.g. Donation to Serenza Music Realm" maxlength="100">
+    </div>
+    <div class="form-row">
+      <div>
+        <label class="fl">Return URL <span style="font-weight:400;color:var(--text4);text-transform:none;letter-spacing:0">(after payment)</span></label>
+        <input type="url" id="pf-return-url" placeholder="https://hymndesk.co.za">
+      </div>
+      <div>
+        <label class="fl">Cancel URL <span style="font-weight:400;color:var(--text4);text-transform:none;letter-spacing:0">(if cancelled)</span></label>
+        <input type="url" id="pf-cancel-url" placeholder="https://hymndesk.co.za">
+      </div>
+    </div>
+
+    <div id="pf-status" style="display:none;padding:9px 11px;border-radius:8px;font-size:12px;margin-bottom:10px;"></div>
+
     <div class="action-row">
       <button class="btn btn-cancel" id="dc-cancel-btn">Cancel</button>
-      <button class="btn btn-purple" id="dc-save-btn">Save Changes</button>
+      <button class="btn btn-green" id="pf-test-btn" style="flex:1;justify-content:center;">Test Connection</button>
+      <button class="btn btn-purple" id="dc-save-btn" style="flex:2;justify-content:center;">Save All Settings</button>
     </div>
   </div>
 </div>
@@ -2097,52 +2136,193 @@ function renderDonateCard(){
   if(btn)btn.addEventListener('click',function(){
     var amount=sel&&sel.value==='custom'?customInput.value.trim():sel?sel.value:'';
     if(!amount){alert('Please choose or enter a donation amount first.');return;}
-    var payfastUrl='https://www.payfast.co.za/donate/go/serenzadeluxeatelier?amount='+encodeURIComponent(amount);
-    window.open(payfastUrl,'_blank');
+    submitPayFastPayment(amount);
   });
 }
 
 function openDonateEditModal(){
   var modal=document.getElementById('donate-edit-modal');
-  var iconEl=document.getElementById('dc-icon-input');
-  var titleEl=document.getElementById('dc-title-input');
-  var textEl=document.getElementById('dc-text-input');
-  var visYes=document.getElementById('dc-visible-yes');
-  var visNo=document.getElementById('dc-visible-no');
-  if(iconEl)  iconEl.value   = infoData.donateIcon  || '';
-  if(titleEl) titleEl.value  = infoData.donateTitle || 'Support This Ministry';
-  if(textEl)  textEl.value   = infoData.donateText  || '';
-  if(visYes)  visYes.checked = infoData.donateVisible!==false;
-  if(visNo)   visNo.checked  = infoData.donateVisible===false;
-  if(modal)   modal.classList.add('open');
+  // Populate card display fields
+  var iconEl  = $i('dc-icon-input');
+  var titleEl = $i('dc-title-input');
+  var textEl  = $i('dc-text-input');
+  var visYes  = document.getElementById('dc-visible-yes');
+  var visNo   = document.getElementById('dc-visible-no');
+  if(iconEl.value  !== undefined) iconEl.value   = infoData.donateIcon  || '';
+  if(titleEl.value !== undefined) titleEl.value  = infoData.donateTitle || 'Support This Ministry';
+  if(textEl.value  !== undefined) textEl.value   = infoData.donateText  || '';
+  if(visYes) visYes.checked = infoData.donateVisible!==false;
+  if(visNo)  visNo.checked  = infoData.donateVisible===false;
+  // Populate PayFast fields from localStorage (admin device only)
+  $i('pf-merchant-id').value  = pfGet('merchantId');
+  $i('pf-merchant-key').value = pfGet('merchantKey');
+  $i('pf-passphrase').value   = pfGet('passphrase');
+  $i('pf-item-name').value    = pfGet('itemName');
+  $i('pf-return-url').value   = pfGet('returnUrl');
+  $i('pf-cancel-url').value   = pfGet('cancelUrl');
+  // Hide status message
+  var st = document.getElementById('pf-status');
+  if(st) st.style.display='none';
+  if(modal) modal.classList.add('open');
 }
 
+// ── PAYFAST SETTINGS ─────────────────────────────────────────────────────────
+// PayFast credentials stored in localStorage on admin device only.
+// Never published to GitHub. Never visible to standard users.
+var PF_KEYS = {
+  merchantId  : 'pf_merchant_id',
+  merchantKey : 'pf_merchant_key',
+  passphrase  : 'pf_passphrase',
+  itemName    : 'pf_item_name',
+  returnUrl   : 'pf_return_url',
+  cancelUrl   : 'pf_cancel_url'
+};
+
+function pfGet(k){ return localStorage.getItem(PF_KEYS[k])||''; }
+function pfSet(k,v){ if(v) localStorage.setItem(PF_KEYS[k],v); else localStorage.removeItem(PF_KEYS[k]); }
+
+function buildPayFastUrl(amount){
+  var merchantId  = pfGet('merchantId');
+  var merchantKey = pfGet('merchantKey');
+  var passphrase  = pfGet('passphrase');
+  var itemName    = pfGet('itemName') || 'Donation to Serenza Music Realm';
+  var returnUrl   = pfGet('returnUrl') || window.location.origin;
+  var cancelUrl   = pfGet('cancelUrl') || window.location.origin;
+
+  // If no merchant credentials configured, fall back to the legacy donate page
+  if(!merchantId || !merchantKey){
+    return 'https://www.payfast.co.za/donate/go/serenzadeluxeatelier?amount='+encodeURIComponent(amount);
+  }
+
+  // Format amount to 2 decimal places as required by PayFast
+  var amountFormatted = parseFloat(amount).toFixed(2);
+
+  // Build the payment data object — field ORDER matters for signature
+  var params = {
+    merchant_id    : merchantId,
+    merchant_key   : merchantKey,
+    return_url     : returnUrl,
+    cancel_url     : cancelUrl,
+    amount         : amountFormatted,
+    item_name      : itemName
+  };
+
+  // Build PayFast URL with POST form (PayFast requires POST, not GET for live payments)
+  // We create and auto-submit a hidden form
+  return params;
+}
+
+function submitPayFastPayment(amount){
+  var data = buildPayFastUrl(amount);
+
+  // Legacy fallback (no credentials set)
+  if(typeof data === 'string'){
+    window.open(data, '_blank');
+    return;
+  }
+
+  // Build and auto-submit a hidden form to PayFast
+  var form = document.createElement('form');
+  form.method = 'POST';
+  form.action = 'https://www.payfast.co.za/eng/process';
+  form.target = '_blank';
+  form.style.display = 'none';
+
+  Object.keys(data).forEach(function(key){
+    var inp = document.createElement('input');
+    inp.type  = 'hidden';
+    inp.name  = key;
+    inp.value = data[key];
+    form.appendChild(inp);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+  setTimeout(function(){ document.body.removeChild(form); }, 1000);
+}
+
+// ── DONATE MODAL JS ───────────────────────────────────────────────────────────
 (function(){
   var saveBtn   = document.getElementById('dc-save-btn');
   var cancelBtn = document.getElementById('dc-cancel-btn');
   var closeBtn  = document.getElementById('close-donate-edit-modal');
+  var testBtn   = document.getElementById('pf-test-btn');
   var modal     = document.getElementById('donate-edit-modal');
+
   function closeDonateModal(){ if(modal) modal.classList.remove('open'); }
   if(closeBtn)  closeBtn.addEventListener('click',  closeDonateModal);
   if(cancelBtn) cancelBtn.addEventListener('click', closeDonateModal);
+
+  function pfStatus(msg, type){
+    var el = document.getElementById('pf-status');
+    if(!el) return;
+    el.style.display = 'block';
+    el.style.background = type==='ok' ? '#f0fdf4' : '#fef2f2';
+    el.style.border = '1px solid ' + (type==='ok' ? '#bbf7d0' : '#fecaca');
+    el.style.color  = type==='ok' ? '#166534' : '#dc2626';
+    el.textContent  = msg;
+  }
+
+  // Test connection — validates credentials are present and well-formed
+  if(testBtn) testBtn.addEventListener('click', function(){
+    var mid  = ($i('pf-merchant-id').value||'').trim();
+    var mkey = ($i('pf-merchant-key').value||'').trim();
+    if(!mid || !mkey){
+      pfStatus('Please enter both Merchant ID and Merchant Key before testing.','err');
+      return;
+    }
+    if(!/^\d+$/.test(mid)){
+      pfStatus('Merchant ID should be numeric only (e.g. 10000100).','err');
+      return;
+    }
+    if(mkey.length < 8){
+      pfStatus('Merchant Key looks too short — check your PayFast Developer Settings.','err');
+      return;
+    }
+    pfStatus('Credentials look valid. Save and use the Donate button on the home screen to do a live test with a small amount.','ok');
+  });
+
   if(saveBtn) saveBtn.addEventListener('click', function(){
-    var iconEl  = document.getElementById('dc-icon-input');
-    var titleEl = document.getElementById('dc-title-input');
-    var textEl  = document.getElementById('dc-text-input');
+    // Card display fields
+    var icon    = ($i('dc-icon-input').value||'').trim();
+    var title   = ($i('dc-title-input').value||'').trim();
+    var text    = ($i('dc-text-input').value||'').trim();
     var visYes  = document.getElementById('dc-visible-yes');
-    var icon    = iconEl  ? iconEl.value.trim()  : '';
-    var title   = titleEl ? titleEl.value.trim() : '';
-    var text    = textEl  ? textEl.value.trim()  : '';
-    var visible = visYes  ? visYes.checked       : true;
+    var visible = visYes ? visYes.checked : true;
+
     if(!title){ alert('Please enter a heading for the card.'); return; }
+
+    // PayFast credentials
+    var mid       = ($i('pf-merchant-id').value||'').trim();
+    var mkey      = ($i('pf-merchant-key').value||'').trim();
+    var passphrase= ($i('pf-passphrase').value||'').trim();
+    var itemName  = ($i('pf-item-name').value||'').trim();
+    var returnUrl = ($i('pf-return-url').value||'').trim();
+    var cancelUrl = ($i('pf-cancel-url').value||'').trim();
+
+    // Validate PayFast fields if provided
+    if(mid && !/^\d+$/.test(mid)){
+      pfStatus('Merchant ID should be numeric only.','err'); return;
+    }
+
+    // Save card display settings to infoData (published via Publish button)
     infoData.donateIcon    = icon || '💵';
     infoData.donateTitle   = title;
     infoData.donateText    = text;
     infoData.donateVisible = visible;
     save();
+
+    // Save PayFast credentials to localStorage on this device only
+    pfSet('merchantId',  mid);
+    pfSet('merchantKey', mkey);
+    pfSet('passphrase',  passphrase);
+    pfSet('itemName',    itemName);
+    pfSet('returnUrl',   returnUrl);
+    pfSet('cancelUrl',   cancelUrl);
+
     renderDonateCard();
     closeDonateModal();
-    toast('Support card updated','success');
+    toast('Settings saved — click Publish to push card text to all users','success');
   });
 })();
 
