@@ -661,7 +661,7 @@ function save(){
     localStorage.setItem('lh_info',JSON.stringify(infoData));
     localStorage.setItem('lh_feedback',JSON.stringify(feedbackList));
   }
-  catch(e){toast('Storage error — export a backup','error');}
+  catch(e){ console.warn('Local storage full'); }
 }
 
 function load(){
