@@ -563,6 +563,38 @@
 
 <div class="toast-container" id="toasts"></div>
 
+<!-- GitHub Token Setup Modal (admin only) -->
+<div class="modal-overlay" id="gh-token-modal">
+  <div class="modal-box narrow">
+    <button class="modal-close" id="gh-token-modal-close"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    <h2 class="modal-title">GitHub Publish Setup</h2>
+    <p class="modal-sub">A one-time setup. Your token is saved on this device only and never shared.</p>
+
+    <div style="background:#FFF8F3;border:1px solid #FFD9B8;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.7;">
+      <strong>How to get your token (do this once):</strong><br>
+      1. Go to <strong>github.com</strong> and sign in<br>
+      2. Click your profile picture (top right) &rarr; <strong>Settings</strong><br>
+      3. Scroll down and click <strong>Developer settings</strong> (bottom of left menu)<br>
+      4. Click <strong>Personal access tokens</strong> &rarr; <strong>Tokens (classic)</strong><br>
+      5. Click <strong>Generate new token (classic)</strong><br>
+      6. Give it a name e.g. <em>Lyric Hub Publish</em><br>
+      7. Under <strong>Select scopes</strong>, tick <strong>repo</strong> (the top checkbox)<br>
+      8. Scroll down and click <strong>Generate token</strong><br>
+      9. Copy the token shown and paste it below &mdash; you will only see it once
+    </div>
+
+    <div class="form-group">
+      <label class="fl">Paste your GitHub token here</label>
+      <input type="password" id="gh-token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="font-family:monospace;font-size:13px;">
+    </div>
+    <p style="font-size:11px;color:#94a3b8;margin-bottom:14px;">Your token is stored only in this browser. If you clear browser data, you will need to paste it again.</p>
+    <div class="action-row">
+      <button class="btn btn-cancel" id="gh-token-cancel">Cancel</button>
+      <button class="btn btn-green" id="gh-token-save">Save &amp; Publish</button>
+    </div>
+  </div>
+</div>
+
 <!-- Admin: Edit Donate Card Modal -->
 <div class="modal-overlay" id="donate-edit-modal">
   <div class="modal-box narrow">
@@ -1780,23 +1812,113 @@ async function syncHymnsFromGithub(){
 }
 
 // ── PUBLISH BUTTON (admin only) ──────────────────────────────────────
-function exportAndPublish(){
+// ── GITHUB AUTO-PUBLISH ──────────────────────────────────────────────
+// Repo details — update these if the repo ever changes
+var GH_OWNER = 'katskm90-bit';
+var GH_REPO  = 'lyric-hub';
+var GH_FILE  = 'hymns.json';
+var GH_BRANCH= 'main';
+
+function getGhToken(){ return localStorage.getItem('lh_gh_token') || ''; }
+function setGhToken(t){ localStorage.setItem('lh_gh_token', t); }
+
+function openGhTokenModal(){
+  var m = document.getElementById('gh-token-modal');
+  var inp = document.getElementById('gh-token-input');
+  if(inp) inp.value = getGhToken();
+  if(m) m.classList.add('open');
+}
+
+async function exportAndPublish(){
   if(!hymns||hymns.length===0){
-    alert('Cannot publish — hymn library is empty in memory.\n\nWait 10 seconds for sync to complete, then try again.');
+    alert('Cannot publish — hymn library is empty.\n\nWait for the sync banner to confirm hymn count, then try again.');
     return;
   }
-  if(!confirm('Publish '+hymns.length+' hymns to all users?\n\nThis overwrites what all devices see. Continue?'))return;
-  var payload={hymns:hymns,bannerSlides:bannerSlides};
-  var blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url;a.download='hymns.json';a.click();
-  URL.revokeObjectURL(url);
-  toast('hymns.json downloaded ('+hymns.length+' hymns) — upload to GitHub to publish','info');
+  var token = getGhToken();
+  if(!token){
+    openGhTokenModal();
+    return;
+  }
+  if(!confirm('Publish ' + hymns.length + ' hymns to all users?\n\nThis will update hymns.json on GitHub immediately. Continue?')) return;
+
+  var pb = document.getElementById('publish-btn');
+  if(pb){ pb.disabled = true; pb.textContent = 'Publishing…'; }
+  showSyncBanner('Publishing to GitHub…');
+
+  try{
+    var payload = JSON.stringify({hymns: hymns, bannerSlides: bannerSlides}, null, 2);
+    var encoded = btoa(unescape(encodeURIComponent(payload)));
+
+    // Step 1: Get current file SHA (required by GitHub API to update a file)
+    var shaRes = await fetch(
+      'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO + '/contents/' + GH_FILE + '?ref=' + GH_BRANCH,
+      { headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json' } }
+    );
+    if(!shaRes.ok){
+      var err = await shaRes.json();
+      if(shaRes.status === 401){ alert('GitHub token rejected. Please update your token.'); openGhTokenModal(); return; }
+      throw new Error('Could not read file SHA: ' + (err.message||shaRes.status));
+    }
+    var shaData = await shaRes.json();
+    var sha = shaData.sha;
+
+    // Step 2: Push updated hymns.json
+    var pushRes = await fetch(
+      'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO + '/contents/' + GH_FILE,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': 'token ' + token,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: 'Publish: ' + hymns.length + ' hymns [Lyric Hub admin]',
+          content: encoded,
+          sha: sha,
+          branch: GH_BRANCH
+        })
+      }
+    );
+    if(!pushRes.ok){
+      var err2 = await pushRes.json();
+      if(pushRes.status === 401){ alert('GitHub token rejected. Please update your token.'); openGhTokenModal(); return; }
+      throw new Error('GitHub push failed: ' + (err2.message||pushRes.status));
+    }
+    showSyncBanner('Published! ' + hymns.length + ' hymns live on GitHub');
+    setTimeout(()=>showSyncBanner(null), 5000);
+    toast('Published successfully — all user devices will sync within 3 minutes', 'success');
+  } catch(e){
+    showSyncBanner(null);
+    alert('Publish failed: ' + e.message + '\n\nCheck your internet connection and token, then try again.\n\nAlternatively use the Backup button to download and upload manually.');
+  } finally {
+    if(pb){ pb.disabled = false; pb.innerHTML = '<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12"/></svg>Publish'; }
+  }
 }
+
 (function(){
-  var pb=document.getElementById('publish-btn');
-  if(pb&&isAdmin){pb.style.display='inline-flex';pb.addEventListener('click',exportAndPublish);}
+  var pb = document.getElementById('publish-btn');
+  if(pb && isAdmin){
+    pb.style.display = 'inline-flex';
+    pb.addEventListener('click', exportAndPublish);
+  }
+
+  // Token modal save
+  var saveToken = document.getElementById('gh-token-save');
+  var cancelToken = document.getElementById('gh-token-cancel');
+  var tokenModal = document.getElementById('gh-token-modal');
+  function closeTokenModal(){ if(tokenModal) tokenModal.classList.remove('open'); }
+  if(cancelToken) cancelToken.addEventListener('click', closeTokenModal);
+  if(document.getElementById('gh-token-modal-close'))
+    document.getElementById('gh-token-modal-close').addEventListener('click', closeTokenModal);
+  if(saveToken) saveToken.addEventListener('click', function(){
+    var val = (document.getElementById('gh-token-input')||{}).value;
+    if(val) val = val.trim();
+    if(!val){ alert('Please paste your GitHub token first.'); return; }
+    setGhToken(val);
+    closeTokenModal();
+    toast('GitHub token saved — click Publish again to push to GitHub', 'success');
+  });
 })();
 
 // ── DONATE HOME CARD ─────────────────────────────────────────────────
