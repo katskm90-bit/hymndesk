@@ -563,6 +563,39 @@
 
 <div class="toast-container" id="toasts"></div>
 
+<!-- Admin: Edit Donate Card Modal -->
+<div class="modal-overlay" id="donate-edit-modal">
+  <div class="modal-box narrow">
+    <button class="modal-close" id="close-donate-edit-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    <h2 class="modal-title">Edit Support Card</h2>
+    <p class="modal-sub">Changes saved here. Click Publish to push to all users.</p>
+    <div class="form-group">
+      <label class="fl">Icon (paste any emoji or HTML code)</label>
+      <input type="text" id="dc-icon-input" maxlength="10" placeholder="&#x1F4B5;" style="font-size:22px;text-align:center;width:90px;padding:8px;">
+      <p style="font-size:11px;color:#94a3b8;margin-top:5px;">Tip: type &#x1F4B5; for &#x1F4B5; &nbsp; &#x2764;&#xFE0F; for &#x2764;&#xFE0F; &nbsp; &#x1F3B5; for &#x1F3B5;</p>
+    </div>
+    <div class="form-group">
+      <label class="fl">Heading</label>
+      <input type="text" id="dc-title-input" maxlength="60" placeholder="Support This Ministry">
+    </div>
+    <div class="form-group">
+      <label class="fl">Description</label>
+      <textarea id="dc-text-input" class="fi" rows="3" placeholder="Your contribution keeps this hymn library free and growing for everyone."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="fl">Visibility</label>
+      <div class="radio-row">
+        <label><input type="radio" name="dc-visible" id="dc-visible-yes" value="yes"> Show on home screen</label>
+        <label><input type="radio" name="dc-visible" id="dc-visible-no" value="no"> Hide from users</label>
+      </div>
+    </div>
+    <div class="action-row">
+      <button class="btn btn-cancel" id="dc-cancel-btn">Cancel</button>
+      <button class="btn btn-purple" id="dc-save-btn">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <script>const LANG_BOOKS={'English':['Christ In Song'],'SDA Hymnal (English)':['SDA Hymnal'],'Tswana':['Kereste Mo Kopelong'],'Sotho':['Keresete Pineng'],'Chichewa':['Khristu Mu Nyimbo'],'Tonga':['Kristu MuNzwiyo'],'Venda':['Ngosha YaDzingosha'],'Shona':['Nyimbo Za Kristo'],'Swahili':['Nyimbo Za Kristo'],'Isizulu':['Ukrestu Esihlabelelweni'],'Isixhosa':['Ukrestu Engomeni'],'Xitsonga':['Risima Ra Vuyimbeleri'],'Kikuyu':['Nyimbo cia Agendi'],'Abagusii':["Ogotera Kw'ogotogia Nyasae"],'Dholuo':['Wende Nyasaye'],'Kinyarwanda':['Indirimbo Zo Guhimbaza Imana'],'Portuguesa':['Hinario Adventusta'],'Espanol':['Himnario Adventista'],'Tumbuka':['Nyimbo za Mpingo wa SDA'],'Sepedi':['Kreste Ka Kopelong']};
 const KEYS=['C','C#/Db','D','D#/Eb','E','F','F#/Gb','G','G#/Ab','A','A#/Bb','B'];
 const BG_CLASSES=['bg-black','bg-navy','bg-purple','bg-vignette','bg-carbon'];
@@ -614,7 +647,7 @@ let infoData = JSON.parse(localStorage.getItem('lh_info')) || {
     about: "Brief explanation of project and its purpose",
     contact: "Contact number: 011 568 2792\nEmail address: info@serenzadeluxeatelier.co.za"
 };
-if(!infoData.donateIcon)    infoData.donateIcon    = '&#x1F4B5;';
+if(!infoData.donateIcon)    infoData.donateIcon    = '💵';
 if(!infoData.donateTitle)   infoData.donateTitle   = 'Support This Ministry';
 if(!infoData.donateText)    infoData.donateText    = 'Your contribution keeps this hymn library free and growing for everyone.';
 if(infoData.donateVisible===undefined) infoData.donateVisible = true;
@@ -1860,7 +1893,7 @@ function openDonateEditModal(){
     var text    = textEl  ? textEl.value.trim()  : '';
     var visible = visYes  ? visYes.checked       : true;
     if(!title){ alert('Please enter a heading for the card.'); return; }
-    infoData.donateIcon    = icon || '&#x1F4B5;';
+    infoData.donateIcon    = icon || '💵';
     infoData.donateTitle   = title;
     infoData.donateText    = text;
     infoData.donateVisible = visible;
@@ -1881,38 +1914,6 @@ applyAccessControls();
 renderHeaderYtLink();
 </script>
 
-<!-- Admin: Edit Donate Card Modal -->
-<div class="modal-overlay" id="donate-edit-modal">
-  <div class="modal-box narrow">
-    <button class="modal-close" id="close-donate-edit-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
-    <h2 class="modal-title">Edit Support Card</h2>
-    <p class="modal-sub">Changes saved here. Click Publish to push to all users.</p>
-    <div class="form-group">
-      <label class="fl">Icon (paste any emoji or HTML code)</label>
-      <input type="text" id="dc-icon-input" maxlength="10" placeholder="&#x1F4B5;" style="font-size:22px;text-align:center;width:90px;padding:8px;">
-      <p style="font-size:11px;color:#94a3b8;margin-top:5px;">Tip: type &#x1F4B5; for &#x1F4B5; &nbsp; &#x2764;&#xFE0F; for &#x2764;&#xFE0F; &nbsp; &#x1F3B5; for &#x1F3B5;</p>
-    </div>
-    <div class="form-group">
-      <label class="fl">Heading</label>
-      <input type="text" id="dc-title-input" maxlength="60" placeholder="Support This Ministry">
-    </div>
-    <div class="form-group">
-      <label class="fl">Description</label>
-      <textarea id="dc-text-input" class="fi" rows="3" placeholder="Your contribution keeps this hymn library free and growing for everyone."></textarea>
-    </div>
-    <div class="form-group">
-      <label class="fl">Visibility</label>
-      <div class="radio-row">
-        <label><input type="radio" name="dc-visible" id="dc-visible-yes" value="yes"> Show on home screen</label>
-        <label><input type="radio" name="dc-visible" id="dc-visible-no" value="no"> Hide from users</label>
-      </div>
-    </div>
-    <div class="action-row">
-      <button class="btn btn-cancel" id="dc-cancel-btn">Cancel</button>
-      <button class="btn btn-purple" id="dc-save-btn">Save Changes</button>
-    </div>
-  </div>
-</div>
 </body>
 </html>
 <script>
