@@ -1794,6 +1794,16 @@ async function syncHymnsFromGithub(){
       bannerSlides=data.bannerSlides;
       renderBanner();
     }
+    // Apply donate card settings from admin publish
+    if(data.donateCard){
+      var dc=data.donateCard;
+      if(dc.icon    !== undefined) infoData.donateIcon    = dc.icon;
+      if(dc.title   !== undefined) infoData.donateTitle   = dc.title;
+      if(dc.text    !== undefined) infoData.donateText    = dc.text;
+      if(dc.visible !== undefined) infoData.donateVisible = dc.visible;
+      localStorage.setItem('lh_info', JSON.stringify(infoData));
+      renderDonateCard();
+    }
     const remoteHymns=data.hymns||[];
     if(remoteHymns.length){
       const favMap={};
@@ -1849,7 +1859,16 @@ async function exportAndPublish(){
   showSyncBanner('Publishing to GitHub…');
 
   try{
-    var payload = JSON.stringify({hymns: hymns, bannerSlides: bannerSlides}, null, 2);
+    var payload = JSON.stringify({
+      hymns: hymns,
+      bannerSlides: bannerSlides,
+      donateCard: {
+        icon:    infoData.donateIcon,
+        title:   infoData.donateTitle,
+        text:    infoData.donateText,
+        visible: infoData.donateVisible
+      }
+    }, null, 2);
     var encoded = btoa(unescape(encodeURIComponent(payload)));
 
     // Step 1: Get current file SHA (required by GitHub API to update a file)
