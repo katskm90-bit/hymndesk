@@ -177,6 +177,40 @@ html.dark .form-error{background:#2a0a0a;border-color:#7f1d1d}
 html.dark .icon-btn:hover{background:var(--bg3)}
 html.dark select.fi option{background:var(--card);color:var(--text)}
 
+
+/* ── USER LOGIN SYSTEM ───────────────────────────────────────────────────── */
+#user-login-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:9px;font-size:13px;font-weight:600;border:1px solid var(--border);background:var(--bg2);color:var(--text2);cursor:pointer;transition:all 0.2s;white-space:nowrap}
+#user-login-btn:hover{border-color:#E8650A;color:#E8650A}
+#user-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#E8650A,#d45a08);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.auth-tab-row{display:flex;border-bottom:2px solid var(--border);margin-bottom:18px}
+.auth-tab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.18s}
+.auth-tab.active{color:#E8650A;border-bottom-color:#E8650A}
+.auth-panel{display:none}.auth-panel.active{display:block}
+.auth-field{margin-bottom:11px}
+.auth-field label{display:block;font-size:11px;font-weight:600;color:#C05A08;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em}
+.auth-field input,.auth-field select{width:100%;padding:9px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none;transition:border-color 0.2s;font-family:inherit}
+.auth-field input:focus,.auth-field select:focus{border-color:#E8650A;background:var(--bg)}
+.auth-msg{display:none;padding:9px 11px;border-radius:8px;font-size:13px;margin-bottom:10px}
+.auth-msg.err{display:block;background:#fef2f2;border:1px solid #fecaca;color:#dc2626}
+.auth-msg.ok{display:block;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+.auth-btn{width:100%;padding:11px;border-radius:9px;font-size:14px;font-weight:600;border:none;cursor:pointer;background:linear-gradient(135deg,#E8650A,#d45a08);color:#fff;margin-top:4px;transition:filter 0.2s}
+.auth-btn:hover{filter:brightness(1.08)}
+.auth-btn:disabled{opacity:0.5;cursor:not-allowed}
+.user-profile-card{display:flex;align-items:center;gap:12px;padding:14px;background:linear-gradient(135deg,#FFF8F3,#FFF0E6);border:1px solid #FFD9B8;border-radius:12px;margin-bottom:16px}
+html.dark .user-profile-card{background:linear-gradient(135deg,#1a1208,#2a1a0a);border-color:#5a3010}
+.user-profile-avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#E8650A,#d45a08);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0}
+.user-profile-info{flex:1;min-width:0}
+.user-profile-name{font-weight:700;font-size:15px;color:var(--text)}
+.user-profile-detail{font-size:12px;color:var(--text3);margin-top:2px}
+/* Stats panel */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.stat-box{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.stat-box-num{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:#E8650A}
+.stat-box-label{font-size:11px;color:var(--text3);margin-top:2px}
+.stats-list-item{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--bg2);border-radius:7px;margin-bottom:5px;font-size:12px}
+.stats-list-item span:first-child{color:var(--text);font-weight:500}
+.stats-list-item span:last-child{color:#E8650A;font-weight:700}
+
 </style>
 </head>
 <body>
@@ -205,6 +239,10 @@ html.dark select.fi option{background:var(--card);color:var(--text)}
     <button class="btn btn-green" id="publish-btn" style="display:none"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12"/></svg>Publish</button>
     <button class="btn btn-blue" id="rep-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Repertoires</button>
     <button class="btn btn-teal" id="app-info-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>Info</button>
+    <button id="user-login-btn">
+      <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span id="user-btn-label">Sign in</span>
+    </button>
     <button class="btn btn-green" id="add-hymn-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>Add Hymn</button>
   </div>
 </header>
@@ -735,6 +773,94 @@ html.dark select.fi option{background:var(--card);color:var(--text)}
       <button class="btn btn-cancel" id="dc-cancel-btn">Cancel</button>
       <button class="btn btn-green" id="pf-test-btn" style="flex:1;justify-content:center;">Test Connection</button>
       <button class="btn btn-purple" id="dc-save-btn" style="flex:2;justify-content:center;">Save All Settings</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── AUTH MODAL ─────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="auth-modal">
+  <div class="modal-box narrow">
+    <button class="modal-close" id="close-auth-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+
+    <!-- Logged-out state -->
+    <div id="auth-logged-out">
+      <h2 class="modal-title">Welcome to HymnDesk</h2>
+      <p class="modal-sub">Sign in or register — your email serves as your username.</p>
+      <div class="auth-tab-row">
+        <div class="auth-tab active" id="tab-login">Sign In</div>
+        <div class="auth-tab" id="tab-register">Register</div>
+      </div>
+
+      <!-- LOGIN PANEL -->
+      <div class="auth-panel active" id="panel-login">
+        <div class="auth-msg" id="login-msg"></div>
+        <div class="auth-field"><label>Email address (your username)</label><input type="email" id="login-email" placeholder="you@example.com" autocomplete="email"></div>
+        <div class="auth-field"><label>Password</label><input type="password" id="login-pw" placeholder="Your password" autocomplete="current-password"></div>
+        <button class="auth-btn" id="do-login-btn">Sign In</button>
+        <p style="text-align:center;margin-top:12px;font-size:12px;color:var(--text3)">No account? <span style="color:#E8650A;cursor:pointer;font-weight:600" id="go-register">Register here</span></p>
+      </div>
+
+      <!-- REGISTER PANEL -->
+      <div class="auth-panel" id="panel-register">
+        <div class="auth-msg" id="reg-msg"></div>
+        <div class="auth-field"><label>Your name *</label><input type="text" id="reg-name" placeholder="e.g. Thabo" autocomplete="given-name"></div>
+        <div class="auth-field"><label>Email address *</label><input type="email" id="reg-email" placeholder="you@example.com" autocomplete="email"></div>
+        <div class="auth-field"><label>Country *</label>
+          <select id="reg-country" style="width:100%;padding:9px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none;font-family:inherit">
+            <option value="">Select your country</option>
+            <option>South Africa</option><option>Zimbabwe</option><option>Zambia</option><option>Botswana</option><option>Namibia</option><option>Malawi</option><option>Mozambique</option><option>Tanzania</option><option>Kenya</option><option>Uganda</option><option>Rwanda</option><option>Nigeria</option><option>Ghana</option><option>Ethiopia</option><option>Other</option>
+          </select>
+        </div>
+        <div class="auth-field"><label>Password *</label><input type="password" id="reg-pw" placeholder="Min 6 characters" autocomplete="new-password"></div>
+        <button class="auth-btn" id="do-register-btn">Create Account</button>
+        <!-- POPIA notice -->
+        <div style="margin-top:12px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--text3);line-height:1.6;">
+          <strong style="color:var(--text2);">&#x1F512; Your privacy is protected.</strong> Your personal information is collected solely to personalise your HymnDesk experience and is not shared with third parties. This is in compliance with the <strong>Protection of Personal Information Act (POPIA)</strong>, Act 4 of 2013. You may request deletion of your data at any time by contacting us.
+        </div>
+        <p style="text-align:center;margin-top:10px;font-size:12px;color:var(--text3)">Already registered? <span style="color:#E8650A;cursor:pointer;font-weight:600" id="go-login">Sign in</span></p>
+      </div>
+    </div>
+
+    <!-- Logged-in state -->
+    <div id="auth-logged-in" style="display:none">
+      <h2 class="modal-title">My Account</h2>
+      <div class="user-profile-card">
+        <div class="user-profile-avatar" id="profile-avatar-letter">?</div>
+        <div class="user-profile-info">
+          <div class="user-profile-name" id="profile-name"></div>
+          <div class="user-profile-detail" id="profile-detail"></div>
+        </div>
+      </div>
+      <button class="auth-btn" id="do-logout-btn" style="background:linear-gradient(135deg,#475569,#334155)">Sign Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADMIN STATS MODAL ────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="stats-modal">
+  <div class="modal-box wide">
+    <button class="modal-close" id="close-stats-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    <h2 class="modal-title">User Statistics</h2>
+    <p class="modal-sub" id="stats-updated"></p>
+    <div id="stats-loading" style="text-align:center;padding:30px 0;color:var(--text3)">Loading statistics…</div>
+    <div id="stats-content" style="display:none">
+      <div class="stats-grid">
+        <div class="stat-box"><div class="stat-box-num" id="stat-total-users">0</div><div class="stat-box-label">Registered users</div></div>
+        <div class="stat-box"><div class="stat-box-num" id="stat-total-logins">0</div><div class="stat-box-label">Total sign-ins</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div>
+          <p class="section-label" style="margin-bottom:8px">Top countries</p>
+          <div id="stats-countries"></div>
+        </div>
+        <div>
+          <p class="section-label" style="margin-bottom:8px">Top churches</p>
+          <div id="stats-churches"></div>
+        </div>
+      </div>
+      <p class="section-label" style="margin:14px 0 8px">Recent registrations</p>
+      <div id="stats-recent" style="max-height:220px;overflow-y:auto"></div>
     </div>
   </div>
 </div>
@@ -2325,6 +2451,252 @@ function submitPayFastPayment(amount){
     toast('Settings saved — click Publish to push card text to all users','success');
   });
 })();
+
+
+// ── USER AUTH SYSTEM ─────────────────────────────────────────────────────────
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxUNUnt_DGi-_6BrozpzNPUWYuem_kobs5q1M0vj7MzRQHko1ImG4FrX7cECod-IYt1Kw/exec';
+
+let currentUser = null;
+
+// Device fingerprint for the Logins sheet
+function getDeviceInfo(){
+  var ua = navigator.userAgent;
+  if(/Mobi|Android/i.test(ua)) return 'Mobile';
+  if(/Tablet|iPad/i.test(ua)) return 'Tablet';
+  return 'Desktop';
+}
+
+// ── Session persistence ───────────────────────────────────────────────────────
+function saveUserSession(user){
+  localStorage.setItem('hd_user', JSON.stringify(user));
+  currentUser = user;
+}
+function clearUserSession(){
+  localStorage.removeItem('hd_user');
+  currentUser = null;
+}
+function loadUserSession(){
+  try{
+    var stored = localStorage.getItem('hd_user');
+    if(stored){ currentUser = JSON.parse(stored); }
+  } catch(e){ currentUser = null; }
+}
+
+// ── API call to Apps Script ───────────────────────────────────────────────────
+async function gasCall(payload){
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'text/plain' } // avoids CORS preflight
+  });
+  if(!res.ok) throw new Error('Network error — please try again.');
+  return await res.json();
+}
+
+// ── Render header user button ─────────────────────────────────────────────────
+function renderUserBtn(){
+  var btn   = document.getElementById('user-login-btn');
+  var label = document.getElementById('user-btn-label');
+  if(!btn) return;
+  if(currentUser){
+    var initials = (currentUser.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    btn.innerHTML = '<div id="user-avatar">'+initials+'</div><span>'+escHtml((currentUser.name||'').split(' ')[0])+'</span>';
+    // Show stats button for admin
+    if(isAdmin){
+      var existing = document.getElementById('stats-btn');
+      if(!existing){
+        var sb = document.createElement('button');
+        sb.id = 'stats-btn';
+        sb.className = 'btn btn-blue';
+        sb.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>Users';
+        sb.addEventListener('click', openStatsModal);
+        btn.parentNode.insertBefore(sb, btn);
+      }
+    }
+  } else {
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span id="user-btn-label">Sign in</span>';
+    // Remove stats button if present
+    var sb = document.getElementById('stats-btn');
+    if(sb) sb.remove();
+  }
+}
+
+// ── Open auth modal ───────────────────────────────────────────────────────────
+function openAuthModal(){
+  var loggedOut = document.getElementById('auth-logged-out');
+  var loggedIn  = document.getElementById('auth-logged-in');
+  clearAuthMsgs();
+  if(currentUser){
+    loggedOut.style.display = 'none';
+    loggedIn.style.display  = 'block';
+    document.getElementById('profile-avatar-letter').textContent =
+      (currentUser.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    document.getElementById('profile-name').textContent = currentUser.name || '';
+    document.getElementById('profile-detail').textContent =
+      (currentUser.church||'') + (currentUser.country ? ' · ' + currentUser.country : '');
+  } else {
+    loggedOut.style.display = 'block';
+    loggedIn.style.display  = 'none';
+    switchAuthTab('login');
+  }
+  openModal('auth-modal');
+}
+
+function clearAuthMsgs(){
+  ['login-msg','reg-msg'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el){ el.className='auth-msg'; el.textContent=''; }
+  });
+}
+
+function showMsg(id, text, type){
+  var el = document.getElementById(id);
+  if(!el) return;
+  el.className = 'auth-msg ' + (type||'err');
+  el.textContent = text;
+}
+
+function switchAuthTab(tab){
+  document.getElementById('tab-login').classList.toggle('active', tab==='login');
+  document.getElementById('tab-register').classList.toggle('active', tab==='register');
+  document.getElementById('panel-login').classList.toggle('active', tab==='login');
+  document.getElementById('panel-register').classList.toggle('active', tab==='register');
+  clearAuthMsgs();
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+async function doLogin(){
+  var email = (document.getElementById('login-email').value||'').trim();
+  var pw    = (document.getElementById('login-pw').value||'').trim();
+  if(!email||!pw){ showMsg('login-msg','Please enter your email and password.'); return; }
+  var btn = document.getElementById('do-login-btn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try{
+    var res = await gasCall({ action:'login', email, password:pw, device:getDeviceInfo() });
+    if(res.success){
+      saveUserSession(res.user);
+      renderUserBtn();
+      closeModal('auth-modal');
+      toast('Welcome back, '+(res.user.name.split(' ')[0])+'!','success');
+    } else {
+      showMsg('login-msg', res.message||'Sign in failed.');
+    }
+  } catch(e){
+    showMsg('login-msg','Connection error — please check your internet and try again.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
+}
+
+// ── REGISTER ─────────────────────────────────────────────────────────────────
+async function doRegister(){
+  var name    = (document.getElementById('reg-name').value||'').trim();
+  var email   = (document.getElementById('reg-email').value||'').trim();
+  var country = (document.getElementById('reg-country').value||'').trim();
+  var pw      = (document.getElementById('reg-pw').value||'').trim();
+  if(!name||!email||!country||!pw){ showMsg('reg-msg','Please fill in all fields.'); return; }
+  if(!/^[^@]+@[^@]+\.[^@]+$/.test(email)){ showMsg('reg-msg','Please enter a valid email address.'); return; }
+  if(pw.length < 6){ showMsg('reg-msg','Password must be at least 6 characters.'); return; }
+  var btn = document.getElementById('do-register-btn');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+  try{
+    // church field sent as empty string — Apps Script accepts optional
+    var res = await gasCall({ action:'register', name, email, church:'', country, password:pw, device:getDeviceInfo() });
+    if(res.success){
+      saveUserSession(res.user);
+      renderUserBtn();
+      closeModal('auth-modal');
+      toast('Welcome to HymnDesk, '+name.split(' ')[0]+'!','success');
+    } else {
+      showMsg('reg-msg', res.message||'Registration failed.');
+    }
+  } catch(e){
+    showMsg('reg-msg','Connection error — please check your internet and try again.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Create Account';
+  }
+}
+
+// ── LOGOUT ────────────────────────────────────────────────────────────────────
+function doLogout(){
+  clearUserSession();
+  renderUserBtn();
+  closeModal('auth-modal');
+  // Remove stats button
+  var sb = document.getElementById('stats-btn');
+  if(sb) sb.remove();
+  toast('Signed out successfully.','info');
+}
+
+// ── ADMIN STATS ───────────────────────────────────────────────────────────────
+async function openStatsModal(){
+  document.getElementById('stats-loading').style.display = 'block';
+  document.getElementById('stats-content').style.display = 'none';
+  document.getElementById('stats-updated').textContent = '';
+  openModal('stats-modal');
+  try{
+    var res = await gasCall({ action:'stats' });
+    if(!res.success) throw new Error(res.message);
+    document.getElementById('stat-total-users').textContent  = res.totalUsers || 0;
+    document.getElementById('stat-total-logins').textContent = res.totalLogins || 0;
+    // Countries
+    var cDiv = document.getElementById('stats-countries');
+    var countries = Object.entries(res.countries||{}).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    cDiv.innerHTML = countries.map(function(c){
+      return '<div class="stats-list-item"><span>'+escHtml(c[0])+'</span><span>'+c[1]+'</span></div>';
+    }).join('') || '<p style="color:var(--text3);font-size:13px">No data yet.</p>';
+    // Churches
+    var chDiv = document.getElementById('stats-churches');
+    chDiv.innerHTML = (res.churches||[]).map(function(c){
+      return '<div class="stats-list-item"><span>'+escHtml(c.name)+'</span><span>'+c.count+'</span></div>';
+    }).join('') || '<p style="color:var(--text3);font-size:13px">No data yet.</p>';
+    // Recent
+    var rDiv = document.getElementById('stats-recent');
+    rDiv.innerHTML = (res.recent||[]).map(function(u){
+      var d = u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-ZA',{day:'numeric',month:'short',year:'numeric'}) : '';
+      return '<div class="stats-list-item" style="flex-direction:column;align-items:flex-start;gap:2px">'
+        +'<div style="display:flex;justify-content:space-between;width:100%"><span style="font-weight:600">'+escHtml(u.name)+'</span><span style="color:var(--text3);font-size:11px">'+d+'</span></div>'
+        +'<div style="color:var(--text3);font-size:11px">'+escHtml(u.church)+' · '+escHtml(u.country)+'</div>'
+        +'</div>';
+    }).join('') || '<p style="color:var(--text3);font-size:13px">No registrations yet.</p>';
+    document.getElementById('stats-updated').textContent = 'Live data from Google Sheets · ' + new Date().toLocaleTimeString('en-ZA');
+    document.getElementById('stats-loading').style.display = 'none';
+    document.getElementById('stats-content').style.display = 'block';
+  } catch(e){
+    document.getElementById('stats-loading').textContent = 'Failed to load stats: ' + e.message;
+  }
+}
+
+// ── Wire up events ────────────────────────────────────────────────────────────
+on('user-login-btn',    'click',  openAuthModal);
+on('close-auth-modal',  'click',  function(){ closeModal('auth-modal'); });
+on('close-stats-modal', 'click',  function(){ closeModal('stats-modal'); });
+on('tab-login',         'click',  function(){ switchAuthTab('login'); });
+on('tab-register',      'click',  function(){ switchAuthTab('register'); });
+on('go-register',       'click',  function(){ switchAuthTab('register'); });
+on('go-login',          'click',  function(){ switchAuthTab('login'); });
+on('do-login-btn',      'click',  doLogin);
+on('do-register-btn',   'click',  doRegister);
+on('do-logout-btn',     'click',  doLogout);
+
+// Enter key support in login/register forms
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Enter') return;
+  var m = document.getElementById('auth-modal');
+  if(!m || !m.classList.contains('open')) return;
+  if(document.getElementById('panel-login').classList.contains('active')) doLogin();
+  else doRegister();
+});
+
+// Backdrop close
+var authModal = document.getElementById('auth-modal');
+if(authModal) authModal.addEventListener('click', function(e){ if(e.target===authModal) closeModal('auth-modal'); });
+var statsModal = document.getElementById('stats-modal');
+if(statsModal) statsModal.addEventListener('click', function(e){ if(e.target===statsModal) closeModal('stats-modal'); });
+
+// Restore session on load
+loadUserSession();
+renderUserBtn();
 
 // ── DARK MODE ────────────────────────────────────────────────────────────────
 function applyTheme(dark){
