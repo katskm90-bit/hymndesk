@@ -242,6 +242,34 @@ html.dark .user-profile-card{background:linear-gradient(135deg,#1a1208,#2a1a0a);
 .country-bar-track{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
 .country-bar-fill{height:100%;background:linear-gradient(90deg,#E8650A,#d45a08);border-radius:3px;transition:width 0.4s}
 .country-bar-count{width:28px;text-align:right;color:var(--text3);font-size:11px;font-weight:600}
+.inbox-tab-row{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px}
+.inbox-tab{flex:1;padding:10px 8px;text-align:center;font-size:12px;font-weight:600;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.18s;position:relative;white-space:nowrap}
+.inbox-tab.active{color:#E8650A;border-bottom-color:#E8650A}
+.inbox-tab:hover:not(.active){color:var(--text2)}
+.inbox-badge{display:inline-flex;align-items:center;justify-content:center;background:#E8650A;color:#fff;border-radius:10px;font-size:9px;font-weight:700;padding:1px 5px;margin-left:5px;min-width:16px;line-height:1.4}
+.inbox-panel{display:none}.inbox-panel.active{display:block}
+.inbox-card{padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:11px;margin-bottom:8px;position:relative}
+.inbox-card.unread{border-left:3px solid #E8650A}
+.inbox-card.unread-blue{border-left:3px solid #3b82f6}
+.inbox-card.unread-green{border-left:3px solid #10b981}
+.inbox-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px}
+.inbox-card-name{font-weight:700;font-size:13px;color:var(--text)}
+.inbox-card-meta{font-size:11px;color:var(--text3);margin-top:1px}
+.inbox-card-time{font-size:10px;color:var(--text4);white-space:nowrap;flex-shrink:0}
+.inbox-card-body{font-size:12px;color:var(--text2);line-height:1.6}
+.inbox-card-contact{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:11px;color:#C05A08;background:#FFF0E6;padding:2px 8px;border-radius:5px;font-weight:600}
+.inbox-card-type{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:5px}
+.inbox-type-bug{background:#fef2f2;color:#dc2626}
+.inbox-type-suggestion{background:#f0fdf4;color:#059669}
+.inbox-type-content{background:#fef3c7;color:#92400e}
+.inbox-type-other{background:var(--bg3);color:var(--text3)}
+.inbox-stars{color:#f59e0b;font-size:14px;letter-spacing:1px}
+.inbox-empty{text-align:center;padding:36px 16px;color:var(--text3)}
+.inbox-empty svg{width:36px;height:36px;stroke:var(--border2);fill:none;stroke-width:1.5;display:block;margin:0 auto 10px}
+.inbox-empty p{font-size:13px}
+.inbox-refresh-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.inbox-count-pill{font-size:11px;color:var(--text3);background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:3px 9px}
+
 .pie-wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .pie-canvas{flex-shrink:0;border-radius:50%}
 .pie-legend{flex:1;min-width:120px}
@@ -325,6 +353,10 @@ html.dark .user-profile-card{background:linear-gradient(135deg,#1a1208,#2a1a0a);
       <span id="user-btn-label">Sign in</span>
     </button>
     <button class="btn btn-green" id="add-hymn-btn"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>Add Hymn</button>
+    <button class="btn btn-amber" id="admin-inbox-btn" style="display:none;position:relative">
+      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0H4m4-4l4 4 4-4"/></svg>
+      Inbox<span id="inbox-total-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#fff;border-radius:50%;width:16px;height:16px;font-size:9px;font-weight:700;display:none;align-items:center;justify-content:center;line-height:1">0</span>
+    </button>
     <button class="btn btn-blue" id="manage-books-btn" style="display:none"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>Books</button>
   </div>
 </header>
@@ -840,6 +872,66 @@ html.dark .user-profile-card{background:linear-gradient(135deg,#1a1208,#2a1a0a);
   </div>
 </div>
 
+
+<!-- ── ADMIN INBOX MODAL ─────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="admin-inbox-modal" style="z-index:270">
+  <div class="modal-box wide" style="max-width:700px">
+    <button class="modal-close" id="close-admin-inbox"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+      <h2 class="modal-title" style="margin-bottom:0">Admin Inbox</h2>
+      <button class="btn btn-ghost" id="inbox-refresh-btn" style="font-size:12px;padding:6px 10px">
+        <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        Refresh
+      </button>
+    </div>
+    <p class="modal-sub" id="inbox-updated">Fetching messages from server and local storage…</p>
+
+    <!-- Tab row -->
+    <div class="inbox-tab-row">
+      <div class="inbox-tab active" id="inbox-tab-enquiries" onclick="switchInboxTab('enquiries')">
+        Ad Enquiries<span class="inbox-badge" id="badge-enquiries" style="display:none">0</span>
+      </div>
+      <div class="inbox-tab" id="inbox-tab-feedback" onclick="switchInboxTab('feedback')">
+        User Feedback<span class="inbox-badge" id="badge-feedback" style="display:none">0</span>
+      </div>
+      <div class="inbox-tab" id="inbox-tab-ratings" onclick="switchInboxTab('ratings')">
+        Ratings<span class="inbox-badge" id="badge-ratings" style="display:none">0</span>
+      </div>
+    </div>
+
+    <div style="max-height:62vh;overflow-y:auto;padding-right:2px">
+
+      <!-- AD ENQUIRIES PANEL -->
+      <div class="inbox-panel active" id="inbox-panel-enquiries">
+        <div class="inbox-refresh-bar">
+          <div class="inbox-count-pill" id="enquiries-count">Loading…</div>
+          <button class="btn btn-ghost" id="mark-enquiries-read-btn" style="font-size:11px;padding:4px 10px">Mark all read</button>
+        </div>
+        <div id="inbox-enquiries-list"></div>
+      </div>
+
+      <!-- USER FEEDBACK PANEL -->
+      <div class="inbox-panel" id="inbox-panel-feedback">
+        <div class="inbox-refresh-bar">
+          <div class="inbox-count-pill" id="feedback-count">Loading…</div>
+          <button class="btn btn-ghost" id="mark-feedback-read-btn" style="font-size:11px;padding:4px 10px">Mark all read</button>
+        </div>
+        <div id="inbox-feedback-list"></div>
+      </div>
+
+      <!-- RATINGS PANEL -->
+      <div class="inbox-panel" id="inbox-panel-ratings">
+        <div class="inbox-refresh-bar">
+          <div class="inbox-count-pill" id="ratings-count">Loading…</div>
+          <div id="ratings-summary" style="font-size:12px;color:var(--text3)"></div>
+        </div>
+        <div id="inbox-ratings-list"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- Admin: Manage Hymn Books Modal -->
 <div class="modal-overlay" id="book-mgmt-modal" style="z-index:160">
   <div class="modal-box wide" style="max-width:640px">
@@ -1314,6 +1406,7 @@ function applyAccessControls() {
     $i('manage-yt-btn').style.display = 'inline-flex';
     $i('admin-info-tools').style.display = 'block';
     if($i('manage-books-btn')) $i('manage-books-btn').style.display = 'inline-flex';
+    if($i('admin-inbox-btn')) $i('admin-inbox-btn').style.display = 'inline-flex';
   } else {
     if($i('backup-btn')) $i('backup-btn').style.display = 'none';
     if($i('banner-manage-btn')) $i('banner-manage-btn').style.display = 'none';
@@ -1322,6 +1415,7 @@ function applyAccessControls() {
     if($i('book-add-hymn-btn')) $i('book-add-hymn-btn').style.display = 'none';
     if($i('empty-add-btn')) $i('empty-add-btn').style.display = 'none';
     if($i('manage-books-btn')) $i('manage-books-btn').style.display = 'none';
+    if($i('admin-inbox-btn')) $i('admin-inbox-btn').style.display = 'none';
     const style = document.createElement('style');
     style.innerHTML = `.del-h { display: none !important; }`;
     document.head.appendChild(style);
@@ -4087,6 +4181,226 @@ async function pollSharedReps(){
 
 // Poll every 2 minutes when app is open
 setInterval(pollSharedReps, 120000);
+
+
+// ── ADMIN INBOX ───────────────────────────────────────────────────────────────
+var inboxReadKeys = JSON.parse(localStorage.getItem('lh_inbox_read')||'{}');
+
+function markInboxRead(type, id){
+  if(!inboxReadKeys[type]) inboxReadKeys[type] = {};
+  inboxReadKeys[type][id] = true;
+  localStorage.setItem('lh_inbox_read', JSON.stringify(inboxReadKeys));
+}
+function isInboxRead(type, id){ return !!(inboxReadKeys[type] && inboxReadKeys[type][id]); }
+function markAllRead(type, ids){
+  if(!inboxReadKeys[type]) inboxReadKeys[type] = {};
+  ids.forEach(function(id){ inboxReadKeys[type][id] = true; });
+  localStorage.setItem('lh_inbox_read', JSON.stringify(inboxReadKeys));
+}
+
+function fmtInboxDate(ts){
+  if(!ts) return '';
+  var d = new Date(typeof ts === 'number' ? ts : Date.parse(ts));
+  if(isNaN(d)) return '';
+  return d.toLocaleDateString('en-ZA',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
+function switchInboxTab(tab){
+  ['enquiries','feedback','ratings'].forEach(function(t){
+    var tabEl = document.getElementById('inbox-tab-'+t);
+    var panEl = document.getElementById('inbox-panel-'+t);
+    if(tabEl) tabEl.classList.toggle('active', t===tab);
+    if(panEl) panEl.classList.toggle('active', t===tab);
+  });
+}
+
+async function openAdminInbox(){
+  openModal('admin-inbox-modal');
+  await loadInbox();
+}
+
+async function loadInbox(){
+  var updEl = document.getElementById('inbox-updated');
+  if(updEl) updEl.textContent = 'Loading…';
+
+  // ── AD ENQUIRIES ────────────────────────────────────────────
+  // Merge: GAS sheet + local storage
+  var enquiries = [];
+  try{
+    // Local (submitted on this device or cached)
+    var local = JSON.parse(localStorage.getItem('lh_ad_enquiries')||'[]');
+    enquiries = local.slice();
+  } catch(e){}
+  try{
+    var res = await gasCall({ action: 'getAdEnquiries' });
+    if(res && res.success && res.enquiries){
+      res.enquiries.forEach(function(r){
+        // Merge by composite key (name+contact+time)
+        if(!enquiries.some(function(e){ return e.date === r.date && e.name === r.name; })){
+          enquiries.push(r);
+        }
+      });
+    }
+  } catch(e){}
+  enquiries.sort(function(a,b){ return (b.date||0)-(a.date||0); });
+  renderInboxEnquiries(enquiries);
+
+  // ── USER FEEDBACK ────────────────────────────────────────────
+  var feedback = [];
+  try{
+    var localFb = JSON.parse(localStorage.getItem('lh_user_feedback')||'[]');
+    feedback = localFb.slice();
+  } catch(e){}
+  try{
+    var resFb = await gasCall({ action: 'getUserFeedback' });
+    if(resFb && resFb.success && resFb.feedback){
+      resFb.feedback.forEach(function(r){
+        if(!feedback.some(function(f){ return f.date === r.date && f.name === r.name; })){
+          feedback.push(r);
+        }
+      });
+    }
+  } catch(e){}
+  feedback.sort(function(a,b){ return new Date(b.date||0)-new Date(a.date||0); });
+  renderInboxFeedback(feedback);
+
+  // ── STAR RATINGS ──────────────────────────────────────────────
+  renderInboxRatings(feedbackList); // feedbackList = local star ratings
+
+  // Update badge on button
+  updateInboxBadge(enquiries, feedback, feedbackList);
+  if(updEl) updEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString('en-ZA');
+}
+
+function renderInboxEnquiries(enquiries){
+  var list = document.getElementById('inbox-enquiries-list');
+  var countEl = document.getElementById('enquiries-count');
+  var badge = document.getElementById('badge-enquiries');
+  if(!list) return;
+  var unread = enquiries.filter(function(e){ return !isInboxRead('enquiry', e.id||(e.name+e.date)); });
+  if(badge){ if(unread.length){ badge.textContent=unread.length; badge.style.display='inline-flex'; } else badge.style.display='none'; }
+  if(countEl) countEl.textContent = enquiries.length + ' enquir' + (enquiries.length===1?'y':'ies');
+  if(!enquiries.length){
+    list.innerHTML = '<div class="inbox-empty"><svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg><p>No ad enquiries yet</p></div>';
+    return;
+  }
+  list.innerHTML = enquiries.map(function(e){
+    var key = e.id||(e.name+e.date);
+    var read = isInboxRead('enquiry', key);
+    return '<div class="inbox-card'+(read?'':' unread')+'" data-key="'+escHtml(String(key))+'" data-type="enquiry">'
+      +'<div class="inbox-card-header">'
+      +'<div><div class="inbox-card-name">'+escHtml(e.name||'Unknown')+'</div>'
+      +'<div class="inbox-card-meta">Re: '+escHtml(e.slideHeadline||'Ad banner enquiry')+'</div></div>'
+      +'<div class="inbox-card-time">'+fmtInboxDate(e.date)+'</div>'
+      +'</div>'
+      +(e.msg?'<div class="inbox-card-body">'+escHtml(e.msg)+'</div>':'')
+      +'<div style="margin-top:6px"><span class="inbox-card-contact">&#128222; '+escHtml(e.contact||'No contact provided')+'</span></div>'
+      +'</div>';
+  }).join('');
+  // Mark read on click
+  list.querySelectorAll('.inbox-card').forEach(function(card){
+    card.addEventListener('click', function(){ markInboxRead('enquiry', card.dataset.key); card.classList.remove('unread'); });
+  });
+  // Mark all read button
+  var markBtn = document.getElementById('mark-enquiries-read-btn');
+  if(markBtn) markBtn.onclick = function(){
+    markAllRead('enquiry', enquiries.map(function(e){ return e.id||(e.name+e.date); }));
+    list.querySelectorAll('.inbox-card').forEach(function(c){ c.classList.remove('unread'); });
+    if(badge) badge.style.display='none';
+  };
+}
+
+function renderInboxFeedback(feedback){
+  var list = document.getElementById('inbox-feedback-list');
+  var countEl = document.getElementById('feedback-count');
+  var badge = document.getElementById('badge-feedback');
+  if(!list) return;
+  var unread = feedback.filter(function(f){ return !isInboxRead('feedback', f.id||(f.name+f.date)); });
+  if(badge){ if(unread.length){ badge.textContent=unread.length; badge.style.display='inline-flex'; } else badge.style.display='none'; }
+  if(countEl) countEl.textContent = feedback.length + ' message' + (feedback.length===1?'':'s');
+  if(!feedback.length){
+    list.innerHTML = '<div class="inbox-empty"><svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg><p>No user feedback yet</p></div>';
+    return;
+  }
+  var typeMap = {bug:'Bug Report',suggestion:'Suggestion',content:'Content Error',other:'Other'};
+  var typeCls = {bug:'inbox-type-bug',suggestion:'inbox-type-suggestion',content:'inbox-type-content',other:'inbox-type-other'};
+  list.innerHTML = feedback.map(function(f){
+    var key = f.id||(f.name+f.date);
+    var read = isInboxRead('feedback', key);
+    var typeLabel = typeMap[f.type]||'Feedback';
+    var typeCssClass = typeCls[f.type]||'inbox-type-other';
+    return '<div class="inbox-card'+(read?'':' unread-blue')+'" data-key="'+escHtml(String(key))+'" data-type="feedback">'
+      +'<div class="inbox-card-header">'
+      +'<div><div class="inbox-card-name"><span class="inbox-card-type '+typeCssClass+'">'+escHtml(typeLabel)+'</span>'+escHtml(f.name||'Anonymous')+'</div>'
+      +'<div class="inbox-card-meta">'+escHtml(f.device||'')+'</div></div>'
+      +'<div class="inbox-card-time">'+fmtInboxDate(f.date)+'</div>'
+      +'</div>'
+      +'<div class="inbox-card-body">'+escHtml(f.message||f.msg||'')+'</div>'
+      +'</div>';
+  }).join('');
+  list.querySelectorAll('.inbox-card').forEach(function(card){
+    card.addEventListener('click', function(){ markInboxRead('feedback', card.dataset.key); card.classList.remove('unread-blue'); });
+  });
+  var markBtn = document.getElementById('mark-feedback-read-btn');
+  if(markBtn) markBtn.onclick = function(){
+    markAllRead('feedback', feedback.map(function(f){ return f.id||(f.name+f.date); }));
+    list.querySelectorAll('.inbox-card').forEach(function(c){ c.classList.remove('unread-blue'); });
+    if(badge) badge.style.display='none';
+  };
+}
+
+function renderInboxRatings(ratings){
+  var list = document.getElementById('inbox-ratings-list');
+  var countEl = document.getElementById('ratings-count');
+  var summaryEl = document.getElementById('ratings-summary');
+  var badge = document.getElementById('badge-ratings');
+  if(!list) return;
+  var unread = (ratings||[]).filter(function(r){ return !isInboxRead('rating', r.id); });
+  if(badge){ if(unread.length){ badge.textContent=unread.length; badge.style.display='inline-flex'; } else badge.style.display='none'; }
+  if(countEl) countEl.textContent = (ratings||[]).length + ' rating' + ((ratings||[]).length===1?'':'s');
+  // Average
+  if((ratings||[]).length && summaryEl){
+    var avg = ratings.reduce(function(s,r){ return s+r.rating; },0)/ratings.length;
+    summaryEl.innerHTML = '&#9733; Average: <strong style="color:var(--text)">'+avg.toFixed(1)+'</strong> / 5';
+  }
+  if(!(ratings||[]).length){
+    list.innerHTML = '<div class="inbox-empty"><svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg><p>No ratings yet</p></div>';
+    return;
+  }
+  list.innerHTML = ratings.map(function(r){
+    var read = isInboxRead('rating', r.id);
+    var stars = '★'.repeat(r.rating)+'☆'.repeat(5-r.rating);
+    return '<div class="inbox-card'+(read?'':' unread-green')+'" data-key="'+escHtml(String(r.id))+'" data-type="rating">'
+      +'<div class="inbox-card-header">'
+      +'<div><div class="inbox-stars">'+stars+'</div>'
+      +'<div class="inbox-card-meta" style="margin-top:2px">Star rating</div></div>'
+      +'<div class="inbox-card-time">'+fmtInboxDate(r.date)+'</div>'
+      +'</div>'
+      +(r.comment?'<div class="inbox-card-body" style="margin-top:4px">&ldquo;'+escHtml(r.comment)+'&rdquo;</div>':'<div class="inbox-card-body" style="font-style:italic;color:var(--text4);margin-top:4px">No comment provided</div>')
+      +'</div>';
+  }).join('');
+  list.querySelectorAll('.inbox-card').forEach(function(card){
+    card.addEventListener('click', function(){ markInboxRead('rating', card.dataset.key); card.classList.remove('unread-green'); });
+  });
+}
+
+function updateInboxBadge(enquiries, feedback, ratings){
+  var unreadE = (enquiries||[]).filter(function(e){ return !isInboxRead('enquiry', e.id||(e.name+e.date)); }).length;
+  var unreadF = (feedback||[]).filter(function(f){ return !isInboxRead('feedback', f.id||(f.name+f.date)); }).length;
+  var unreadR = (ratings||[]).filter(function(r){ return !isInboxRead('rating', r.id); }).length;
+  var total = unreadE + unreadF + unreadR;
+  var badge = document.getElementById('inbox-total-badge');
+  if(badge){
+    if(total>0){ badge.textContent=total; badge.style.display='flex'; }
+    else badge.style.display='none';
+  }
+}
+
+// Wire up buttons
+on('admin-inbox-btn','click', openAdminInbox);
+on('close-admin-inbox','click', function(){ closeModal('admin-inbox-modal'); });
+on('inbox-refresh-btn','click', loadInbox);
+
 
 // ── DARK MODE ────────────────────────────────────────────────────────────────
 function applyTheme(dark){
