@@ -1516,21 +1516,29 @@ stars.forEach(star => {
     });
 });
 
-on('submit-rating-btn', 'click', () => {
+on('submit-rating-btn', 'click', async function() {
     if (currentRating === 0) {
         toast('Please select a star rating first', 'error');
         return;
     }
-    const comment = $i('rate-comment-input').value.trim();
-    feedbackList.unshift({
-        id: uid(),
-        rating: currentRating,
-        comment: comment,
-        date: Date.now()
-    });
+    var comment = $i('rate-comment-input').value.trim();
+    var entry = { id: uid(), rating: currentRating, comment: comment, date: Date.now(),
+      name: currentUser ? currentUser.name : 'Anonymous',
+      userId: currentUser ? currentUser.id : 'anonymous' };
+    feedbackList.unshift(entry);
     save();
     closeModal('rate-modal');
     toast('Thank you for your feedback!', 'success');
+    // Send to GAS so admin can see it
+    try {
+      await gasCall({ action: 'submitRating', rating: entry.rating, comment: entry.comment,
+        name: entry.name, userId: entry.userId, date: entry.date });
+    } catch(e) {
+      // Queue for later flush when online
+      var q = JSON.parse(localStorage.getItem('lh_rating_queue')||'[]');
+      q.push(entry);
+      localStorage.setItem('lh_rating_queue', JSON.stringify(q.slice(0,200)));
+    }
 });
 
 // --- Admin Feedback View ---
@@ -2955,10 +2963,52 @@ async function flushUsageQueue(){
   }
 }
 
-// Flush queue when connectivity is restored
+// Flush all offline queues when connectivity is restored
 window.addEventListener('online', function(){
   flushUsageQueue();
+  flushFeedbackQueue();
+  flushRatingQueue();
 });
+
+// Flush queued user feedback (submitted while offline)
+async function flushFeedbackQueue(){
+  var queue = [];
+  try{ queue = JSON.parse(localStorage.getItem('lh_user_feedback')||'[]'); }catch(e){}
+  if(!queue.length) return;
+  var sent = [];
+  for(var i=0; i<queue.length; i++){
+    var f = queue[i];
+    try{
+      await gasCall({ action:'userFeedback', type:f.type, message:f.message,
+        name:f.name, userId:f.userId||'anonymous', device:f.device||'unknown' });
+      sent.push(f.id);
+    } catch(e){ break; } // stop if still offline
+  }
+  if(sent.length){
+    queue = queue.filter(function(f){ return !sent.includes(f.id); });
+    localStorage.setItem('lh_user_feedback', JSON.stringify(queue));
+  }
+}
+
+// Flush queued star ratings (submitted while offline)
+async function flushRatingQueue(){
+  var queue = [];
+  try{ queue = JSON.parse(localStorage.getItem('lh_rating_queue')||'[]'); }catch(e){}
+  if(!queue.length) return;
+  var sent = [];
+  for(var i=0; i<queue.length; i++){
+    var r = queue[i];
+    try{
+      await gasCall({ action:'submitRating', rating:r.rating, comment:r.comment,
+        name:r.name, userId:r.userId, date:r.date });
+      sent.push(r.id);
+    } catch(e){ break; }
+  }
+  if(sent.length){
+    queue = queue.filter(function(r){ return !sent.includes(r.id); });
+    localStorage.setItem('lh_rating_queue', JSON.stringify(queue));
+  }
+}
 
 // Also flush after successful hymn sync (we know we are online)
 
@@ -4265,10 +4315,23 @@ async function loadInbox(){
   renderInboxFeedback(feedback);
 
   // ── STAR RATINGS ──────────────────────────────────────────────
-  renderInboxRatings(feedbackList); // feedbackList = local star ratings
+  // Merge local ratings + GAS ratings
+  var allRatings = (feedbackList||[]).slice();
+  try{
+    var resR = await gasCall({ action: 'getRatings' });
+    if(resR && resR.success && resR.ratings){
+      resR.ratings.forEach(function(r){
+        if(!allRatings.some(function(x){ return x.id===r.id || (x.date===r.date && x.name===r.name); })){
+          allRatings.push(r);
+        }
+      });
+    }
+  } catch(e){}
+  allRatings.sort(function(a,b){ return (b.date||0)-(a.date||0); });
+  renderInboxRatings(allRatings);
 
   // Update badge on button
-  updateInboxBadge(enquiries, feedback, feedbackList);
+  updateInboxBadge(enquiries, feedback, allRatings);
   if(updEl) updEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString('en-ZA');
 }
 
@@ -4618,8 +4681,55 @@ on('logo-home-btn','click',function(){
 syncHymnsFromGithub().then(function(){
   // Check for incoming shared repertoire link after hymns are loaded
   checkIncomingRepLink();
+  // Flush any queued offline data after initial sync (we know we're online)
+  flushUsageQueue();
+  flushFeedbackQueue();
+  flushRatingQueue();
 });
 setTimeout(syncHymnsFromGithub, 4000);
+
+// ── HOURLY BACKGROUND AUTO-REFRESH ────────────────────────────────────────────
+// Syncs hymn library and flushes all offline queues every 60 minutes.
+// Never runs when offline — protects cached data from being wiped.
+var BG_REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour in ms
+var bgRefreshTimer = null;
+
+function startBackgroundRefresh(){
+  if(bgRefreshTimer) clearInterval(bgRefreshTimer);
+  bgRefreshTimer = setInterval(function(){
+    if(!navigator.onLine) return; // skip if offline — never touch local data
+    syncHymnsFromGithub();
+    flushUsageQueue();
+    flushFeedbackQueue();
+    flushRatingQueue();
+    // Update inbox badge silently for admin
+    if(isAdmin) updateInboxBadgeSilent();
+  }, BG_REFRESH_INTERVAL);
+}
+
+// Silent background badge update for admin (no modal open needed)
+async function updateInboxBadgeSilent(){
+  if(!isAdmin || !navigator.onLine) return;
+  try{
+    var eRes = await gasCall({ action:'getAdEnquiries' });
+    var fRes = await gasCall({ action:'getUserFeedback' });
+    var rRes = await gasCall({ action:'getRatings' });
+    var eq = (eRes&&eRes.enquiries)||[];
+    var fb = (fRes&&fRes.feedback)||[];
+    var rt = ((rRes&&rRes.ratings)||[]).concat(feedbackList||[]);
+    updateInboxBadge(eq, fb, rt);
+  } catch(e){}
+}
+
+// Stop timer when tab goes offline, restart when back online
+window.addEventListener('offline', function(){
+  if(bgRefreshTimer){ clearInterval(bgRefreshTimer); bgRefreshTimer = null; }
+});
+window.addEventListener('online', function(){
+  startBackgroundRefresh();
+});
+
+startBackgroundRefresh();
 
 applyAccessControls();
 renderHeaderYtLink();
