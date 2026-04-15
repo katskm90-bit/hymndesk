@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HymnDesk Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',Arial,sans-serif;background:#0d0d0d;color:#fff;
+    display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .wrap{text-align:center;padding:40px 24px}
+  .mark{width:72px;height:72px;background:#E8650A;border-radius:18px;
+    display:flex;align-items:center;justify-content:center;margin:0 auto 24px}
+  h1{font-size:22px;font-weight:700;margin-bottom:8px}
+  p{font-size:14px;color:#888;margin-bottom:32px}
+  .spinner{width:28px;height:28px;border:3px solid rgba(232,101,10,0.3);
+    border-top-color:#E8650A;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+<script>
+  // Redirect immediately to the app with admin flag
+  // Using sessionStorage so the app knows to open admin on load
+  sessionStorage.setItem('hd_admin_entry','1');
+  window.location.replace('https://hymndesk.co.za/?admin=true');
+</script>
+</head>
+<body>
+<div class="wrap">
+  <div class="mark">
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 56 56">
+      <rect x="2"  y="22" width="8" height="20" rx="4" fill="#fff" opacity="0.38"/>
+      <rect x="14" y="14" width="8" height="28" rx="4" fill="#fff" opacity="0.70"/>
+      <rect x="26" y="4"  width="8" height="38" rx="4" fill="#fff"/>
+      <rect x="38" y="14" width="8" height="28" rx="4" fill="#fff" opacity="0.70"/>
+      <rect x="50" y="22" width="8" height="20" rx="4" fill="#fff" opacity="0.38"/>
+      <rect x="14" y="12" width="32" height="5"  rx="2.5" fill="#fff"/>
+    </svg>
+  </div>
+  <h1>HymnDesk Admin</h1>
+  <p>Opening admin panel...</p>
+  <div class="spinner"></div>
+</div>
+</body>
+</html>
