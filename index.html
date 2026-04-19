@@ -5384,8 +5384,8 @@ async function loadAppHealth() {
   rows.push(healthRow('Offline queues', (q1 + q2) + ' items pending', (q1 + q2) === 0 ? 'ok' : 'warn'));
 
   div.innerHTML = rows.join('') + '<div style="margin-top:10px;display:flex;gap:8px">'
-    + '<button class="btn btn-ghost" style="flex:1;justify-content:center;font-size:12px" onclick="if(confirm('Clear all local storage? This resets user data on this device.'))localStorage.clear()">Clear Local Cache</button>'
-    + '<button class="btn btn-outline" style="flex:1;justify-content:center;font-size:12px" onclick="syncHymnsFromGithub().then(function(){toast('Sync complete','success');loadAppHealth()})">Force Sync</button>'
+    + '<button class="btn btn-ghost" style="flex:1;justify-content:center;font-size:12px" onclick="if(confirm(\'Clear all local storage? This resets user data on this device.\'))localStorage.clear()">Clear Local Cache</button>'
+    + '<button class="btn btn-outline" style="flex:1;justify-content:center;font-size:12px" onclick="syncHymnsFromGithub().then(function(){toast(\'Sync complete\',\'success\');loadAppHealth()})">Force Sync</button>'
     + '</div>';
 }
 
@@ -5418,7 +5418,7 @@ function buildThemeSwatches() {
   var wrap = document.getElementById('proj-theme-swatches');
   if (!wrap) return;
   wrap.innerHTML = PROJ_THEMES.map(function(t) {
-    return '<button onclick="applyProjTheme('' + t.id + '')" title="' + t.label + '" '
+    return '<button onclick="applyProjTheme(\'' + t.id + '\')" title="' + t.label + '" '
       + 'style="height:48px;border-radius:9px;border:2px solid ' + (_currentThemeId===t.id ? '#E8650A' : 'rgba(255,255,255,0.15)') + ';cursor:pointer;background:' + t.preview + ';display:flex;align-items:flex-end;padding:5px;transition:all 0.18s">'
       + '<span style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.7);text-shadow:0 1px 3px rgba(0,0,0,0.8)">' + t.label + '</span>'
       + '</button>';
