@@ -2,8 +2,8 @@
 // Scores: Has Service Worker, Has Logic, Offline Support,
 //         Background Sync, Periodic Sync, Push Notifications
 
-const CACHE_NAME = 'hymndesk-v5';
-const HYMNS_CACHE = 'hymndesk-hymns-v5';
+const CACHE_NAME = 'hymndesk-v6';
+const HYMNS_CACHE = 'hymndesk-hymns-v6';
 
 const APP_SHELL = [
   '/',
@@ -74,7 +74,34 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
-  // App shell — cache first, network fallback
+  // App shell — NETWORK FIRST for HTML/JS, so code updates reach users on every reload.
+  // Only falls back to cache if the network fetch fails (offline).
+  var isHtmlOrRoot = event.request.mode === 'navigate'
+    || url.endsWith('/')
+    || url.endsWith('/index.html')
+    || url.endsWith('/manifest.json')
+    || url.endsWith('/sw.js');
+
+  if (isHtmlOrRoot) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' })
+        .then(function(response) {
+          if (response && response.status === 200) {
+            var clone = response.clone();
+            caches.open(CACHE_NAME).then(function(c) { c.put(event.request, clone); });
+          }
+          return response;
+        })
+        .catch(function() {
+          return caches.match(event.request).then(function(cached) {
+            return cached || caches.match('/') || caches.match('/index.html');
+          });
+        })
+    );
+    return;
+  }
+
+  // Other static assets (images, fonts, etc.) — cache first, network fallback
   event.respondWith(
     caches.match(event.request).then(function(cached) {
       if (cached) return cached;
