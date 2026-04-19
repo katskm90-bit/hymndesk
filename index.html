@@ -2500,7 +2500,6 @@ function toggleFullscreen(){
 });
 on('fullscreen-btn','click',toggleFullscreen);
 on('proj-bg-btn', 'click',cycleProjBg);
-if($i('proj-color-picker')) { on('proj-color-picker', 'input', function(e) { const p=$i('projection'); p.classList.remove(...BG_CLASSES); p.style.background=e.target.value; }); }
 on('next-stanza', 'click',nextSlide);
 on('prev-stanza', 'click',prevSlide);
 on('font-inc', 'click',()=>{projFontSize=Math.min(96,projFontSize+4);applyFontSize();});
@@ -4997,25 +4996,48 @@ function openAutoTimerModal(){
     +'<input type="range" id="at-slider" min="0" max="3600" step="5" value="'+curVal+'" style="flex:1;accent-color:#E8650A">'
     +'<span id="at-display" style="font-size:20px;font-weight:700;color:#E8650A;min-width:58px;text-align:right">'+(curVal?fmtTime(curVal):'Off')+'</span>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px" id="at-presets">'+presetsHtml+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px" id="at-presets">'+presetsHtml+'</div>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:9px">'
+    +'<label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;flex-shrink:0">Custom</label>'
+    +'<input type="number" id="at-custom" min="0" max="86400" step="1" placeholder="e.g. 45" value="'+(curVal||'')+'" style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-weight:600;outline:none;text-align:center">'
+    +'<span style="font-size:12px;color:var(--text3);font-weight:500;flex-shrink:0">seconds</span>'
+    +'</div>'
     +'<div style="display:flex;gap:8px">'
     +'<button id="at-cancel" style="flex:1;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text2);font-weight:600;cursor:pointer;font-size:13px">Cancel</button>'
     +'<button id="at-apply" style="flex:2;padding:10px;background:linear-gradient(135deg,#E8650A,#d45a08);border:none;border-radius:9px;color:#fff;font-weight:600;cursor:pointer;font-size:13px">Apply</button>'
     +'</div>';
   overlay.appendChild(box);
-  box.querySelector('#at-slider').addEventListener('input', updateAtDisplay);
+  box.querySelector('#at-slider').addEventListener('input', function(){
+    var v = parseInt(document.getElementById('at-slider').value)||0;
+    document.getElementById('at-display').textContent = v?fmtTime(v):'Off';
+    document.getElementById('at-custom').value = v||'';
+  });
+  box.querySelector('#at-custom').addEventListener('input', function(){
+    var v = parseInt(document.getElementById('at-custom').value)||0;
+    // Clamp slider to its max, but keep the custom value regardless
+    document.getElementById('at-slider').value = Math.min(v, 3600);
+    document.getElementById('at-display').textContent = v?fmtTime(v):'Off';
+  });
   box.querySelector('#at-cancel').addEventListener('click',function(){ overlay.remove(); });
   box.querySelector('#at-apply').addEventListener('click', applyAutoTimer);
   box.querySelectorAll('#at-presets button').forEach(function(btn){
-    btn.addEventListener('click',function(){ box.querySelector('#at-slider').value=btn.dataset.val; updateAtDisplay(); });
+    btn.addEventListener('click',function(){
+      var v = parseInt(btn.dataset.val)||0;
+      document.getElementById('at-slider').value = Math.min(v, 3600);
+      document.getElementById('at-custom').value = v||'';
+      document.getElementById('at-display').textContent = v?fmtTime(v):'Off';
+    });
   });
   document.body.appendChild(overlay);
   overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.remove(); });
 }
-function fmtTime(s){ if(!s||s===0) return 'Off'; if(s<60) return s+'s'; if(s<3600) return Math.floor(s/60)+'m '+(s%60?s%60+'s':''); return Math.floor(s/3600)+'h'; }
+function fmtTime(s){ if(!s||s===0) return 'Off'; if(s<60) return s+'s'; if(s<3600) return Math.floor(s/60)+'m '+(s%60?s%60+'s':''); return Math.floor(s/3600)+'h'+(s%3600?' '+Math.floor((s%3600)/60)+'m':''); }
 function updateAtDisplay(){ var v=parseInt(document.getElementById('at-slider').value)||0; document.getElementById('at-display').textContent=v?fmtTime(v):'Off'; }
 function applyAutoTimer(){
-  var v=parseInt(document.getElementById('at-slider').value)||0;
+  // Prefer the custom input value (free-form, not capped by slider); fall back to slider
+  var customEl = document.getElementById('at-custom');
+  var v = customEl && customEl.value !== '' ? parseInt(customEl.value)||0 : parseInt(document.getElementById('at-slider').value)||0;
+  if (v < 0) v = 0;
   document.getElementById('auto-timer-modal').remove();
   if(!v){ stopAutoAdv(); autoAdvActive=false; updateTimerDisplay(); toast('Auto-advance off','info'); return; }
   autoAdvInterval=v; autoAdvActive=true; startAutoAdv();
@@ -5436,7 +5458,8 @@ function applyProjTheme(id) {
   var p = document.getElementById('projection');
   if (!p) return;
   _currentThemeId = id;
-  p.style.background = '';
+  // Fully clear any previous inline background (including !important) before switching themes
+  p.style.removeProperty('background');
   // Remove all old theme classes
   PROJ_THEMES.forEach(function(t) { p.classList.remove(t.id); });
   var theme = PROJ_THEMES.find(function(t){ return t.id === id; });
@@ -5470,16 +5493,22 @@ if (_bgBtn) {
   _bgBtn.addEventListener('click', function(e) { e.stopPropagation(); openProjThemePicker(); });
 }
 
-// Custom colour picker still works inline
+// Custom colour picker — picks any colour, applies immediately
 var _cpicker = document.getElementById('proj-color-picker');
 if (_cpicker) {
-  _cpicker.addEventListener('input', function(e) {
+  var _applyCustomColor = function(colorValue) {
     var p = document.getElementById('projection');
+    if (!p) return;
+    // Strip every theme class so none of them override the inline style
     PROJ_THEMES.forEach(function(t) { p.classList.remove(t.id); });
-    p.style.background = e.target.value;
+    BG_CLASSES.forEach(function(c) { p.classList.remove(c); });
+    // Use setProperty with 'important' to beat any remaining CSS class rule
+    p.style.setProperty('background', colorValue, 'important');
     _currentThemeId = 'custom';
     buildThemeSwatches();
-  });
+  };
+  _cpicker.addEventListener('input',  function(e) { _applyCustomColor(e.target.value); });
+  _cpicker.addEventListener('change', function(e) { _applyCustomColor(e.target.value); });
 }
 
 // Close theme picker when clicking outside
