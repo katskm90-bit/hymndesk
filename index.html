@@ -1584,6 +1584,17 @@ html.dark .user-profile-card{background:linear-gradient(135deg,#1a1208,#2a1a0a);
 </div>
 
 <script>
+// ── DUAL-SCREEN PROJECTION — projector window flag ───────────────────────────
+// When the URL has ?proj=1, this window is the clean output display for a
+// secondary projector driven by the control (main) HymnDesk window.
+// The projector UI and BroadcastChannel listener live in a dedicated
+// <script> block after this one so the main app code can be fully wrapped
+// inside an `if (!IS_PROJECTOR_WINDOW)` guard and never executes in projector
+// mode.
+const IS_PROJECTOR_WINDOW = new URLSearchParams(window.location.search).get('proj') === '1';
+const DUAL_SCREEN_CHANNEL = 'hymndesk-projection-v1';
+
+if (!IS_PROJECTOR_WINDOW) {
 // ── DEVICE TYPE ───────────────────────────────────────────────────────────────
 // isMobile  = phone (touch, narrow)
 // isTablet  = tablet (touch, wider)
@@ -1596,6 +1607,148 @@ const isDesktop = !isMobile && !isTablet;
 // Phone & tablet get reading mode (no projection overlay)
 // Desktop gets full projection with fullscreen
 const READING_MODE = isMobile || isTablet;
+
+// ── DUAL-SCREEN PROJECTION ───────────────────────────────────────────────────
+// When the URL has ?proj=1, this window is the clean output display for a
+// secondary projector. The control window opens this in a popup and sends
+// slide updates via BroadcastChannel. In this mode we skip the normal app
+// UI entirely and show only the slide content.
+const IS_PROJECTOR_WINDOW = new URLSearchParams(window.location.search).get('proj') === '1';
+const DUAL_SCREEN_CHANNEL = 'hymndesk-projection-v1';
+
+if (IS_PROJECTOR_WINDOW) {
+  // Replace the document body with a minimal projector-only surface.
+  // Done as early as possible so the rest of the app JS does nothing.
+  document.addEventListener('DOMContentLoaded', function(){
+    document.title = 'HymnDesk — Projector';
+    document.body.innerHTML = '' +
+      '<div id="dsp-root" style="position:fixed;inset:0;background:#0d0d0d;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:\'Inter\',sans-serif;color:#fff">' +
+      '  <div id="dsp-waiting" style="text-align:center;padding:40px;opacity:0.8">' +
+      '    <div style="font-family:\'Playfair Display\',serif;font-size:32px;font-weight:700;margin-bottom:12px">HymnDesk Projector</div>' +
+      '    <div style="font-size:15px;color:rgba(255,255,255,0.6);margin-bottom:24px">Waiting for the control window to send a slide…</div>' +
+      '    <div style="font-size:13px;color:rgba(255,255,255,0.4);line-height:1.6">Drag this window to the projector screen, then press F11 for fullscreen.</div>' +
+      '  </div>' +
+      '  <div id="dsp-stage" style="display:none;flex:1;align-items:center;justify-content:center;padding:60px 40px;text-align:center;width:100%;height:100%"></div>' +
+      '</div>';
+
+    // Load the Playfair Display + Inter fonts so the output matches the main window
+    var fontLink = document.createElement('link');
+    fontLink.rel = 'stylesheet';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap';
+    document.head.appendChild(fontLink);
+
+    // Also pull in the core projection CSS classes the content markup uses
+    var styleEl = document.createElement('style');
+    styleEl.textContent =
+      '.proj-stanza-label{font-family:"Playfair Display",serif;font-weight:700;color:#FFB366;margin-bottom:17px;font-size:clamp(16px,2vw,22px)}' +
+      '.proj-stanza-text{font-family:"Playfair Display",serif;color:#fff;line-height:1.55;white-space:pre-line}' +
+      '.proj-segment-wrap,.proj-stanza-wrap{text-align:center;width:100%;max-width:1200px}' +
+      '.proj-segment-badge{display:inline-block;padding:7px 22px;background:rgba(232,101,10,0.2);border:1px solid rgba(232,101,10,0.35);border-radius:10px;color:#FFD9B8;font-size:clamp(12px,1.2vw,16px);font-weight:600;margin-bottom:22px;text-transform:uppercase;letter-spacing:0.1em}' +
+      '.proj-segment-name{font-family:"Playfair Display",serif;font-size:clamp(40px,6vw,90px);font-weight:800;color:#fff;line-height:1.2;margin-bottom:14px;text-shadow:0 2px 20px rgba(0,0,0,0.3)}' +
+      '.proj-segment-note{font-family:"Playfair Display",serif;font-size:clamp(18px,2.5vw,32px);color:#FFBB88;line-height:1.4}' +
+      '.proj-ann-body{font-family:"Playfair Display",serif;font-size:clamp(16px,2.2vw,26px);color:#e2e8f0;line-height:1.7;max-width:1000px;text-align:center;white-space:pre-line;margin:0 auto}' +
+      '.divider-wrap{text-align:center;padding:20px 0}' +
+      '.divider-up-next{display:inline-block;padding:6px 15px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#FFBB88;font-size:clamp(13px,1.4vw,18px);font-weight:600;margin-bottom:15px}' +
+      '.divider-title{font-family:"Playfair Display",serif;font-size:clamp(32px,5vw,60px);font-weight:800;color:#fff;line-height:1.2;margin-bottom:11px}' +
+      '.divider-ref{font-size:clamp(16px,1.8vw,22px);color:#FFBB88;margin-bottom:17px;display:flex;align-items:center;justify-content:center;gap:10px}' +
+      '.divider-key-box{display:inline-block;padding:10px 26px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px}' +
+      '.divider-key-label{color:#FFBB88;font-size:clamp(11px,1.1vw,14px);margin-bottom:3px}' +
+      '.divider-key-val{font-family:"Playfair Display",serif;font-size:clamp(32px,3.5vw,42px);font-weight:800;color:#fff}' +
+      '#dsp-root.bg-black{background:#0d0d0d}' +
+      '#dsp-root.bg-navy{background:#0a0f2e}' +
+      '#dsp-root.bg-purple{background:#1a0533}' +
+      '#dsp-root.bg-vignette{background:radial-gradient(circle,#334155 0%,#020617 100%)}' +
+      '#dsp-root.bg-carbon{background:repeating-linear-gradient(45deg,#0f172a,#0f172a 10px,#1e293b 10px,#1e293b 20px)}';
+    document.head.appendChild(styleEl);
+
+    var root = document.getElementById('dsp-root');
+    var stage = document.getElementById('dsp-stage');
+    var waiting = document.getElementById('dsp-waiting');
+    var channel = null;
+    var disconnectTimer = null;
+    var currentFontSize = 48;
+
+    function applyTheme(theme){
+      if (!theme) return;
+      // Remove all known theme classes first
+      ['bg-black','bg-navy','bg-purple','bg-forest','bg-crimson','bg-slate','bg-vignette','bg-carbon','bg-velvet','bg-dotted','bg-paper','bg-waves','bg-aurora','bg-sunset','bg-grid'].forEach(function(c){
+        root.classList.remove(c);
+      });
+      root.style.removeProperty('background');
+      if (theme.classId) {
+        root.classList.add(theme.classId);
+      } else if (theme.css) {
+        root.style.setProperty('background', theme.css, 'important');
+      }
+    }
+
+    function showSlide(msg){
+      if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
+      waiting.style.display = 'none';
+      stage.style.display = 'flex';
+      if (msg.theme) applyTheme(msg.theme);
+      if (msg.fontSize) currentFontSize = msg.fontSize;
+      stage.innerHTML = msg.html || '';
+      // Apply the font size to any stanza-text nodes injected
+      stage.querySelectorAll('.proj-stanza-text').forEach(function(el){
+        el.style.fontSize = currentFontSize + 'px';
+      });
+    }
+
+    function showWaiting(reason){
+      stage.style.display = 'none';
+      waiting.style.display = '';
+      var msgEl = waiting.querySelector('div:nth-child(2)');
+      if (msgEl && reason) msgEl.textContent = reason;
+    }
+
+    try {
+      channel = new BroadcastChannel(DUAL_SCREEN_CHANNEL);
+      channel.onmessage = function(ev){
+        var msg = ev.data || {};
+        if (msg.type === 'slide')      showSlide(msg);
+        else if (msg.type === 'theme') applyTheme(msg.theme);
+        else if (msg.type === 'font')  {
+          currentFontSize = msg.fontSize || currentFontSize;
+          stage.querySelectorAll('.proj-stanza-text').forEach(function(el){
+            el.style.fontSize = currentFontSize + 'px';
+          });
+        }
+        else if (msg.type === 'clear') showWaiting('Projector cleared.');
+        else if (msg.type === 'close') {
+          showWaiting('Control window disconnected. This window will close shortly.');
+          setTimeout(function(){ try { window.close(); } catch(e){} }, 3000);
+        }
+        else if (msg.type === 'ping' && channel) {
+          channel.postMessage({ type: 'pong' });
+        }
+      };
+      // Announce we're ready so the control window can send the current slide
+      channel.postMessage({ type: 'projector-ready' });
+    } catch(e){
+      waiting.innerHTML = '<div style="color:#ff6b6b;font-size:16px">Your browser does not support BroadcastChannel. Dual-screen projection requires a modern browser (Chrome, Edge, Firefox, Safari 15.4+).</div>';
+    }
+
+    // Keyboard: F11 or F for fullscreen on this window; Esc leaves fullscreen
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'f' || e.key === 'F' || e.key === 'F11') {
+        e.preventDefault();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(function(){});
+        } else {
+          document.exitFullscreen && document.exitFullscreen().catch(function(){});
+        }
+      }
+    });
+
+    window.addEventListener('beforeunload', function(){
+      if (channel) { try { channel.postMessage({ type: 'projector-closing' }); } catch(e){} }
+    });
+  });
+  // Do not run any of the main app initialisation in projector-window mode.
+  // Return from this script block early.
+}
+
 
 const LANG_BOOKS={'English':['Christ In Song'],'SDA Hymnal (English)':['SDA Hymnal'],'Tswana':['Kereste Mo Kopelong'],'Sotho':['Keresete Pineng'],'Chichewa':['Khristu Mu Nyimbo'],'Tonga':['Kristu MuNzwiyo'],'Venda':['Ngosha YaDzingosha'],'Shona':['Nyimbo Za Kristo'],'Swahili':['Nyimbo Za Kristo'],'Isizulu':['Ukrestu Esihlabelelweni'],'Isixhosa':['Ukrestu Engomeni'],'Xitsonga':['Risima Ra Vuyimbeleri'],'Kikuyu':['Nyimbo cia Agendi'],'Abagusii':["Ogotera Kw'ogotogia Nyasae"],'Dholuo':['Wende Nyasaye'],'Kinyarwanda':['Indirimbo Zo Guhimbaza Imana'],'Portuguesa':['Hinario Adventusta'],'Espanol':['Himnario Adventista'],'Tumbuka':['Nyimbo za Mpingo wa SDA'],'Sepedi':['Kreste Ka Kopelong']};
 const KEYS=['C','C#/Db','D','D#/Eb','E','F','F#/Gb','G','G#/Ab','A','A#/Bb','B'];
@@ -5898,6 +6051,205 @@ renderSlide = function() {
   btns.appendChild(btn);
 })();
 
+// ═══════════════════════════════════════════════════════════════════════════
+// DUAL-SCREEN PROJECTION — control (main) window side
+// Opens a second window at /?proj=1, mirrors slide content via BroadcastChannel.
+// ═══════════════════════════════════════════════════════════════════════════
+(function setupDualScreen() {
+  if (READING_MODE) return; // desktop only
+  if (typeof BroadcastChannel === 'undefined') return; // browser support check
+
+  var projectorWin = null;
+  var channel = null;
+  var projectorReady = false;
+  var poller = null;
+
+  // Build theme payload to send: prefer the CSS class for known themes,
+  // fall back to raw CSS for custom colours and gradient themes.
+  function currentThemePayload() {
+    var projEl = document.getElementById('projection');
+    if (!projEl) return { classId: 'bg-black' };
+    // Find which bg-* class (if any) is currently on the projection element
+    var foundClass = null;
+    var known = ['bg-black','bg-navy','bg-purple','bg-forest','bg-crimson','bg-slate','bg-vignette','bg-carbon','bg-velvet','bg-dotted','bg-paper','bg-waves','bg-aurora','bg-sunset','bg-grid'];
+    for (var i = 0; i < known.length; i++) {
+      if (projEl.classList.contains(known[i])) { foundClass = known[i]; break; }
+    }
+    if (foundClass) return { classId: foundClass };
+    // Custom colour or inline background — read the live computed style
+    var css = projEl.style.background || getComputedStyle(projEl).background;
+    return { css: css };
+  }
+
+  function currentSlidePayload() {
+    var content = document.getElementById('proj-content');
+    if (!content) return null;
+    return {
+      type: 'slide',
+      html: content.innerHTML,
+      theme: currentThemePayload(),
+      fontSize: (typeof projFontSize === 'number' ? projFontSize : 48)
+    };
+  }
+
+  function sendSlide() {
+    if (!channel) return;
+    var payload = currentSlidePayload();
+    if (payload) channel.postMessage(payload);
+  }
+
+  function sendTheme() {
+    if (!channel) return;
+    channel.postMessage({ type: 'theme', theme: currentThemePayload() });
+  }
+
+  function sendFont() {
+    if (!channel) return;
+    channel.postMessage({ type: 'font', fontSize: (typeof projFontSize === 'number' ? projFontSize : 48) });
+  }
+
+  function updateButtonLabel() {
+    var btn = document.getElementById('dual-screen-btn');
+    if (!btn) return;
+    if (projectorWin && !projectorWin.closed) {
+      btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M16 8l4 3-4 3"/></svg> Projector on';
+      btn.style.background = 'rgba(16,185,129,0.3)';
+      btn.style.borderColor = 'rgba(16,185,129,0.5)';
+    } else {
+      btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M16 8l4 3-4 3"/></svg> Dual Screen';
+      btn.style.background = '';
+      btn.style.borderColor = '';
+    }
+  }
+
+  function openProjectorWindow() {
+    // Compute a sensible popup size — second monitor typical
+    var w = Math.min(1920, screen.width);
+    var h = Math.min(1080, screen.height);
+    var features = 'popup=yes,width=' + w + ',height=' + h + ',left=100,top=100';
+    try {
+      projectorWin = window.open('/?proj=1', 'hymndesk-projector', features);
+    } catch(e) {
+      projectorWin = null;
+    }
+    if (!projectorWin) {
+      toast('Popup blocked. Allow popups for hymndesk.co.za, then try again.', 'error');
+      return;
+    }
+
+    if (!channel) {
+      try { channel = new BroadcastChannel('hymndesk-projection-v1'); } catch(e) { return; }
+      channel.onmessage = function(ev){
+        var msg = ev.data || {};
+        if (msg.type === 'projector-ready') {
+          projectorReady = true;
+          // Send current state immediately
+          sendSlide();
+        }
+        else if (msg.type === 'projector-closing') {
+          projectorReady = false;
+        }
+      };
+    }
+
+    // Poll to detect the popup being closed manually so we can update UI
+    if (poller) clearInterval(poller);
+    poller = setInterval(function(){
+      if (projectorWin && projectorWin.closed) {
+        projectorReady = false;
+        projectorWin = null;
+        updateButtonLabel();
+        clearInterval(poller);
+        poller = null;
+        toast('Projector window closed', 'info');
+      }
+    }, 800);
+
+    updateButtonLabel();
+    toast('Projector window opened — drag it to the second screen, then press F for fullscreen.', 'success');
+  }
+
+  function closeProjectorWindow() {
+    if (channel) { try { channel.postMessage({ type: 'close' }); } catch(e){} }
+    if (projectorWin && !projectorWin.closed) {
+      try { projectorWin.close(); } catch(e){}
+    }
+    projectorWin = null;
+    projectorReady = false;
+    if (poller) { clearInterval(poller); poller = null; }
+    updateButtonLabel();
+  }
+
+  function toggleProjectorWindow() {
+    if (projectorWin && !projectorWin.closed) {
+      // Offer to close — but if the user wants to re-focus it, easier: just focus
+      try { projectorWin.focus(); } catch(e){}
+      // Also offer close via a quick toast action — simpler: ask via confirm
+      if (confirm('Projector window is already open. Close it?')) {
+        closeProjectorWindow();
+      }
+      return;
+    }
+    openProjectorWindow();
+  }
+
+  // Watch #proj-content for changes and mirror to projector
+  var projContent = document.getElementById('proj-content');
+  if (projContent && typeof MutationObserver !== 'undefined') {
+    var contentObs = new MutationObserver(function(){ if (projectorReady) sendSlide(); });
+    contentObs.observe(projContent, { childList: true, subtree: true, characterData: true });
+  }
+
+  // Watch #projection class changes (theme changes) and mirror
+  var projEl = document.getElementById('projection');
+  if (projEl && typeof MutationObserver !== 'undefined') {
+    var themeObs = new MutationObserver(function(muts){
+      muts.forEach(function(m){
+        if (m.attributeName === 'class' || m.attributeName === 'style') {
+          if (projectorReady) sendTheme();
+        }
+      });
+    });
+    themeObs.observe(projEl, { attributes: true, attributeFilter: ['class', 'style'] });
+  }
+
+  // Hook projection exit — tell projector to clear
+  var _origExit = typeof exitProjection !== 'undefined' ? exitProjection : null;
+  if (_origExit) {
+    window.exitProjection = function(){
+      if (channel && projectorReady) {
+        try { channel.postMessage({ type: 'clear' }); } catch(e){}
+      }
+      _origExit();
+    };
+  }
+
+  // Hook font-inc / font-dec clicks to also broadcast
+  ['font-inc','font-dec'].forEach(function(id){
+    var b = document.getElementById(id);
+    if (b) b.addEventListener('click', function(){ setTimeout(sendFont, 50); });
+  });
+
+  // When main window closes, tell projector
+  window.addEventListener('beforeunload', function(){
+    if (channel && projectorReady) {
+      try { channel.postMessage({ type: 'close' }); } catch(e){}
+    }
+  });
+
+  // Add the Dual Screen button to projection controls
+  var btns = document.querySelector('.proj-btns');
+  if (btns) {
+    var dsBtn = document.createElement('button');
+    dsBtn.className = 'proj-btn';
+    dsBtn.id = 'dual-screen-btn';
+    dsBtn.title = 'Open a second window to send clean slide output to a projector on another screen';
+    dsBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M16 8l4 3-4 3"/></svg> Dual Screen';
+    dsBtn.addEventListener('click', toggleProjectorWindow);
+    btns.appendChild(dsBtn);
+  }
+})();
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MOBILE INSTRUMENTAL AUDIO — play / pause / stop in reading view
@@ -6024,6 +6376,157 @@ closeReadingView = function() {
 
 applyAccessControls();
 renderHeaderYtLink();
+
+} // end of if (!IS_PROJECTOR_WINDOW) — main app block
+</script>
+
+<script>
+// ── DUAL-SCREEN PROJECTION — projector window UI ─────────────────────────────
+// Only runs when this window was opened with ?proj=1. Replaces the body with
+// a minimal slide surface and listens on BroadcastChannel for updates from
+// the control window.
+(function(){
+  if (new URLSearchParams(window.location.search).get('proj') !== '1') return;
+
+  document.title = 'HymnDesk — Projector';
+
+  function initProjector(){
+    document.body.innerHTML = '' +
+      '<div id="dsp-root" style="position:fixed;inset:0;background:#0d0d0d;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:\'Inter\',sans-serif;color:#fff">' +
+      '  <div id="dsp-waiting" style="text-align:center;padding:40px;opacity:0.8">' +
+      '    <div style="font-family:\'Playfair Display\',serif;font-size:32px;font-weight:700;margin-bottom:12px">HymnDesk Projector</div>' +
+      '    <div id="dsp-waiting-msg" style="font-size:15px;color:rgba(255,255,255,0.6);margin-bottom:24px">Waiting for the control window to send a slide…</div>' +
+      '    <div style="font-size:13px;color:rgba(255,255,255,0.4);line-height:1.6">Drag this window to the projector screen, then press F for fullscreen.</div>' +
+      '  </div>' +
+      '  <div id="dsp-stage" style="display:none;align-items:center;justify-content:center;padding:60px 40px;text-align:center;width:100%;height:100%"></div>' +
+      '</div>';
+
+    var fontLink = document.createElement('link');
+    fontLink.rel = 'stylesheet';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap';
+    document.head.appendChild(fontLink);
+
+    var styleEl = document.createElement('style');
+    styleEl.textContent = [
+      'html,body{margin:0;padding:0;overflow:hidden;background:#0d0d0d}',
+      '.proj-stanza-label{font-family:"Playfair Display",serif;font-weight:700;color:#FFB366;margin-bottom:17px;font-size:clamp(16px,2vw,22px)}',
+      '.proj-stanza-text{font-family:"Playfair Display",serif;color:#fff;line-height:1.55;white-space:pre-line}',
+      '.proj-segment-wrap,.proj-stanza-wrap{text-align:center;width:100%;max-width:1200px}',
+      '.proj-segment-badge{display:inline-block;padding:7px 22px;background:rgba(232,101,10,0.2);border:1px solid rgba(232,101,10,0.35);border-radius:10px;color:#FFD9B8;font-size:clamp(12px,1.2vw,16px);font-weight:600;margin-bottom:22px;text-transform:uppercase;letter-spacing:0.1em}',
+      '.proj-segment-name{font-family:"Playfair Display",serif;font-size:clamp(40px,6vw,90px);font-weight:800;color:#fff;line-height:1.2;margin-bottom:14px;text-shadow:0 2px 20px rgba(0,0,0,0.3)}',
+      '.proj-segment-note{font-family:"Playfair Display",serif;font-size:clamp(18px,2.5vw,32px);color:#FFBB88;line-height:1.4}',
+      '.proj-ann-body{font-family:"Playfair Display",serif;font-size:clamp(16px,2.2vw,26px);color:#e2e8f0;line-height:1.7;max-width:1000px;text-align:center;white-space:pre-line;margin:0 auto}',
+      '.divider-wrap{text-align:center;padding:20px 0}',
+      '.divider-up-next{display:inline-block;padding:6px 15px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#FFBB88;font-size:clamp(13px,1.4vw,18px);font-weight:600;margin-bottom:15px}',
+      '.divider-title{font-family:"Playfair Display",serif;font-size:clamp(32px,5vw,60px);font-weight:800;color:#fff;line-height:1.2;margin-bottom:11px}',
+      '.divider-ref{font-size:clamp(16px,1.8vw,22px);color:#FFBB88;margin-bottom:17px;display:flex;align-items:center;justify-content:center;gap:10px}',
+      '.divider-key-box{display:inline-block;padding:10px 26px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px}',
+      '.divider-key-label{color:#FFBB88;font-size:clamp(11px,1.1vw,14px);margin-bottom:3px}',
+      '.divider-key-val{font-family:"Playfair Display",serif;font-size:clamp(32px,3.5vw,42px);font-weight:800;color:#fff}',
+      '#dsp-root.bg-black{background:#0d0d0d}',
+      '#dsp-root.bg-navy{background:#0a0f2e}',
+      '#dsp-root.bg-purple{background:#1a0533}',
+      '#dsp-root.bg-forest{background:#0a1f0a}',
+      '#dsp-root.bg-crimson{background:#1a0008}',
+      '#dsp-root.bg-slate{background:#0f172a}',
+      '#dsp-root.bg-vignette{background:radial-gradient(circle,#334155 0%,#020617 100%)}',
+      '#dsp-root.bg-carbon{background:repeating-linear-gradient(45deg,#0f172a,#0f172a 10px,#1e293b 10px,#1e293b 20px)}',
+      '#dsp-root.bg-velvet{background:linear-gradient(135deg,#1a0030,#2d1b69)}',
+      '#dsp-root.bg-dotted{background:radial-gradient(circle at 20% 30%,rgba(255,255,255,0.08) 1px,transparent 2px),radial-gradient(circle at 70% 60%,rgba(255,255,255,0.06) 1px,transparent 2px),radial-gradient(circle at 40% 80%,rgba(255,255,255,0.05) 1px,transparent 2px),#050914}',
+      '#dsp-root.bg-paper{background:repeating-linear-gradient(0deg,rgba(255,255,255,0.02) 0px,rgba(255,255,255,0.02) 1px,transparent 1px,transparent 4px),linear-gradient(135deg,#2a1f12,#1a1208)}',
+      '#dsp-root.bg-waves{background:linear-gradient(135deg,#0a1929 0%,#1a3a5c 50%,#0a1929 100%)}',
+      '#dsp-root.bg-aurora{background:linear-gradient(135deg,#0a0a2e 0%,#1a5c8a 40%,#2d7a5f 70%,#0a0a2e 100%)}',
+      '#dsp-root.bg-sunset{background:linear-gradient(180deg,#1a0533 0%,#4a1a3d 50%,#7a2a2a 100%)}',
+      '#dsp-root.bg-grid{background:repeating-linear-gradient(0deg,transparent 0px,transparent 39px,rgba(255,255,255,0.04) 39px,rgba(255,255,255,0.04) 40px),repeating-linear-gradient(90deg,transparent 0px,transparent 39px,rgba(255,255,255,0.04) 39px,rgba(255,255,255,0.04) 40px),#0a1929}'
+    ].join('');
+    document.head.appendChild(styleEl);
+
+    var root = document.getElementById('dsp-root');
+    var stage = document.getElementById('dsp-stage');
+    var waiting = document.getElementById('dsp-waiting');
+    var waitingMsg = document.getElementById('dsp-waiting-msg');
+    var channel = null;
+    var currentFontSize = 48;
+    var THEME_CLASSES = ['bg-black','bg-navy','bg-purple','bg-forest','bg-crimson','bg-slate','bg-vignette','bg-carbon','bg-velvet','bg-dotted','bg-paper','bg-waves','bg-aurora','bg-sunset','bg-grid'];
+
+    function applyTheme(theme){
+      if (!theme) return;
+      THEME_CLASSES.forEach(function(c){ root.classList.remove(c); });
+      root.style.removeProperty('background');
+      if (theme.classId) {
+        root.classList.add(theme.classId);
+      } else if (theme.css) {
+        root.style.setProperty('background', theme.css, 'important');
+      }
+    }
+
+    function showSlide(msg){
+      waiting.style.display = 'none';
+      stage.style.display = 'flex';
+      if (msg.theme) applyTheme(msg.theme);
+      if (typeof msg.fontSize === 'number') currentFontSize = msg.fontSize;
+      stage.innerHTML = msg.html || '';
+      stage.querySelectorAll('.proj-stanza-text').forEach(function(el){
+        el.style.fontSize = currentFontSize + 'px';
+      });
+    }
+
+    function showWaiting(reason){
+      stage.style.display = 'none';
+      waiting.style.display = '';
+      if (waitingMsg && reason) waitingMsg.textContent = reason;
+    }
+
+    try {
+      channel = new BroadcastChannel(DUAL_SCREEN_CHANNEL);
+      channel.onmessage = function(ev){
+        var msg = ev.data || {};
+        if (msg.type === 'slide')       showSlide(msg);
+        else if (msg.type === 'theme')  applyTheme(msg.theme);
+        else if (msg.type === 'font')   {
+          if (typeof msg.fontSize === 'number') currentFontSize = msg.fontSize;
+          stage.querySelectorAll('.proj-stanza-text').forEach(function(el){
+            el.style.fontSize = currentFontSize + 'px';
+          });
+        }
+        else if (msg.type === 'clear')  showWaiting('Projector cleared. Waiting for next slide…');
+        else if (msg.type === 'close')  {
+          showWaiting('Control window disconnected. This window will close shortly.');
+          setTimeout(function(){ try { window.close(); } catch(e){} }, 3000);
+        }
+        else if (msg.type === 'ping' && channel) {
+          channel.postMessage({ type: 'pong' });
+        }
+      };
+      // Announce readiness so the control window can send the current slide
+      channel.postMessage({ type: 'projector-ready' });
+    } catch(err){
+      waiting.innerHTML = '<div style="color:#ff6b6b;font-size:16px;padding:20px">Your browser does not support BroadcastChannel. Dual-screen projection requires a modern browser (Chrome, Edge, Firefox, Safari 15.4+).</div>';
+    }
+
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(function(){});
+        } else {
+          document.exitFullscreen && document.exitFullscreen().catch(function(){});
+        }
+      }
+    });
+
+    window.addEventListener('beforeunload', function(){
+      if (channel) { try { channel.postMessage({ type: 'projector-closing' }); } catch(e){} }
+    });
+  }
+
+  const DUAL_SCREEN_CHANNEL = 'hymndesk-projection-v1';
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initProjector);
+  } else {
+    initProjector();
+  }
+})();
 </script>
 
 <!-- ── PROJECTION THEME PICKER ─────────────────────────────────────────────── -->
