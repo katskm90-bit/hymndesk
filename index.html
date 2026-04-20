@@ -441,6 +441,8 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
       Inbox<span id="inbox-total-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#fff;border-radius:50%;width:16px;height:16px;font-size:9px;font-weight:700;display:none;align-items:center;justify-content:center;line-height:1">0</span>
     </button>
     <button class="btn btn-outline" id="manage-books-btn" style="display:none"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>Books</button>
+    <button class="btn btn-outline" id="manage-hotd-btn" style="display:none" title="Hymn of the Day — schedule for upcoming dates"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Hymn of Day</button>
+    <button class="btn btn-outline" id="manage-analytics-btn" style="display:none" title="Analytics — usage insights"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V9m4 10V5m4 14v-7"/></svg>Analytics</button>
   </div>
 </header>
 
@@ -465,6 +467,8 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
   </div>
   <!-- Donate card — rendered by renderDonateCard() -->
   <div id="donate-home-card" style="margin:0 24px 20px;"></div>
+  <!-- Hymn of the Day — rendered by renderHotdCard() when scheduled for today -->
+  <div id="hotd-home-card" style="margin:0 24px 20px;display:none"></div>
   <div id="global-search-results" style="display:none;padding:0 24px 16px"></div>
 <div class="book-grid" id="book-grid"></div>
   <div class="empty-state" id="home-empty" style="display:none">
@@ -897,6 +901,7 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
     <div id="rd-empty" style="display:none;text-align:center;padding:20px 0"><p style="color:var(--text3);font-size:14px">No items yet. Add hymns or service segments.</p></div>
     <div class="action-row">
       <button class="btn btn-purple" id="start-proj-btn" style="flex:2;padding:10px;justify-content:center">Start projection</button>
+      <button class="btn btn-outline" id="print-rep-btn" style="padding:10px;justify-content:center" title="Print or save as PDF for bulletin use"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" width="14" height="14"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>Print</button>
       <button class="btn btn-outline" id="share-rep-btn" style="padding:10px;justify-content:center"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" width="14" height="14"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share</button>
       <button class="btn btn-ghost" id="edit-rep-btn" style="padding:10px;justify-content:center">Edit</button>
       <button class="btn btn-red" id="del-rep-btn" style="padding:10px;justify-content:center">Delete</button>
@@ -1203,6 +1208,46 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
     <h2 class="modal-title">Recently Deleted</h2>
     <p class="modal-sub">Hymns and books deleted in the last 30 days. Restore anything that was removed by mistake. After 30 days, items are permanently removed.</p>
     <div id="recently-deleted-list"></div>
+  </div>
+</div>
+
+<!-- Admin: Hymn of the Day Scheduler -->
+<div class="modal-overlay" id="hotd-modal" style="z-index:160">
+  <div class="modal-box wide" style="max-width:700px">
+    <button class="modal-close" id="close-hotd-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    <h2 class="modal-title">Hymn of the Day — Schedule</h2>
+    <p class="modal-sub">Pick a hymn for each upcoming day. It will appear on every user's home screen for that date only.</p>
+    <div class="form-error" id="hotd-error"></div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px">
+      <div class="section-label">Schedule a hymn</div>
+      <div class="form-row">
+        <div>
+          <label class="fl">Date *</label>
+          <input type="date" id="hotd-date" class="fi">
+        </div>
+        <div>
+          <label class="fl">Hymn *</label>
+          <select id="hotd-hymn" class="fi"><option value="">Select a hymn</option></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="fl">Devotional note <span style="color:var(--text4);font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+        <textarea id="hotd-note" class="fi" rows="2" placeholder="A short reflection, reference, or reason for this hymn on this day"></textarea>
+      </div>
+      <button class="btn btn-purple btn-full" id="hotd-save-btn">Save to schedule</button>
+    </div>
+    <div class="section-label">Scheduled (next 30 days)</div>
+    <div id="hotd-list"></div>
+  </div>
+</div>
+
+<!-- Admin: Analytics Dashboard -->
+<div class="modal-overlay" id="analytics-modal" style="z-index:160">
+  <div class="modal-box wide" style="max-width:780px">
+    <button class="modal-close" id="close-analytics-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    <h2 class="modal-title">Analytics &mdash; This Device</h2>
+    <p class="modal-sub">Usage patterns from this device's local history. For cross-device user counts, the GAS backend will need to be extended in a later session.</p>
+    <div id="analytics-body"></div>
   </div>
 </div>
 
@@ -1942,6 +1987,8 @@ function applyAccessControls() {
     $i('manage-yt-btn').style.display = 'inline-flex';
     $i('admin-info-tools').style.display = 'block';
     if($i('manage-books-btn')) $i('manage-books-btn').style.display = 'inline-flex';
+    if($i('manage-hotd-btn')) $i('manage-hotd-btn').style.display = 'inline-flex';
+    if($i('manage-analytics-btn')) $i('manage-analytics-btn').style.display = 'inline-flex';
     if($i('admin-inbox-btn')) $i('admin-inbox-btn').style.display = 'inline-flex';
   } else {
     if($i('backup-btn')) $i('backup-btn').style.display = 'none';
@@ -1951,6 +1998,8 @@ function applyAccessControls() {
     if($i('book-add-hymn-btn')) $i('book-add-hymn-btn').style.display = 'none';
     if($i('empty-add-btn')) $i('empty-add-btn').style.display = 'none';
     if($i('manage-books-btn')) $i('manage-books-btn').style.display = 'none';
+    if($i('manage-hotd-btn')) $i('manage-hotd-btn').style.display = 'none';
+    if($i('manage-analytics-btn')) $i('manage-analytics-btn').style.display = 'none';
     if($i('admin-inbox-btn')) $i('admin-inbox-btn').style.display = 'none';
     const style = document.createElement('style');
     style.innerHTML = `.del-h { display: none !important; }`;
@@ -3157,12 +3206,128 @@ on('submit-rep', 'click',saveRep);
 on('close-rep-detail', 'click',()=>{closeModal('rep-detail-modal');openModal('rep-list-modal');currentRep=null;});
 on('browse-hymns-btn', 'click',()=>closeModal('rep-detail-modal'));
 on('start-proj-btn', 'click',startRepProjection);
+on('print-rep-btn', 'click', printRepertoire);
 on('add-segment-btn', 'click',()=>openSegmentModal(null));
 on('edit-rep-btn', 'click',()=>{if(!currentRep)return;editingRep=currentRep;$i('rep-form-title').textContent='Edit repertoire';$i('submit-rep').textContent='Update repertoire';$i('rf-name').value=currentRep.name;$i('rf-date').value=currentRep.date||'';$i('rep-form-error').classList.remove('show');openModal('rep-form-modal');});
 on('del-rep-btn', 'click',()=>{repToDelete=currentRep;openModal('del-rep-modal');});
 on('cancel-del-rep', 'click',()=>{closeModal('del-rep-modal');repToDelete=null;});
 on('confirm-del-rep', 'click',deleteRep);
 on('close-sel-rep', 'click',()=>{closeModal('sel-rep-modal');hymnToAddToRep=null;});
+
+// ── PRINT / PDF EXPORT OF REPERTOIRE ─────────────────────────────────────────
+// Opens a new window with a printer-friendly service program. The user then
+// uses the browser's native Save-as-PDF or print dialog. This avoids a heavy
+// PDF-library dependency and matches how church offices already work.
+function printRepertoire(){
+  if (!currentRep) return;
+  var items = repItems.filter(function(i){ return i.repId === currentRep.id; }).sort(function(a,b){ return a.order - b.order; });
+  if (!items.length) { toast('Nothing to print — repertoire is empty', 'info'); return; }
+
+  var dateStr = currentRep.date
+    ? new Date(currentRep.date + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    : '';
+
+  // Build an ordered list of renderable blocks. Skip soft-deleted hymns.
+  var blocksHtml = '';
+  var visibleIdx = 0;
+  items.forEach(function(item){
+    if (item.itemType === 'announcement') {
+      visibleIdx++;
+      blocksHtml += '<div class="prg-item prg-announcement">' +
+        '<div class="prg-num">' + visibleIdx + '</div>' +
+        '<div class="prg-body">' +
+          '<div class="prg-type">Announcement</div>' +
+          '<div class="prg-title">' + escHtml(item.annHeadline || '') + '</div>' +
+          (item.annBody ? '<div class="prg-note">' + escHtml(item.annBody) + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    } else if (item.itemType === 'segment') {
+      visibleIdx++;
+      blocksHtml += '<div class="prg-item prg-segment">' +
+        '<div class="prg-num">' + visibleIdx + '</div>' +
+        '<div class="prg-body">' +
+          '<div class="prg-type">Service segment</div>' +
+          '<div class="prg-title">' + escHtml(item.segName || '') + '</div>' +
+          (item.segNote ? '<div class="prg-note">' + escHtml(item.segNote) + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    } else {
+      var h = hymns.find(function(x){ return x.id === item.hymnId; });
+      if (!h || h.deletedAt) return; // skip missing or soft-deleted
+      visibleIdx++;
+      var parts = [];
+      parts.push(escHtml(h.book) + ' #' + h.number);
+      if (h.language) parts.push(escHtml(h.language));
+      if (item.key) parts.push('Key: ' + escHtml(item.key));
+      blocksHtml += '<div class="prg-item prg-hymn">' +
+        '<div class="prg-num">' + visibleIdx + '</div>' +
+        '<div class="prg-body">' +
+          '<div class="prg-type">Hymn</div>' +
+          '<div class="prg-title">' + escHtml(h.title) + '</div>' +
+          (h.writer ? '<div class="prg-writer">by ' + escHtml(h.writer) + '</div>' : '') +
+          '<div class="prg-meta">' + parts.join(' &middot; ') + '</div>' +
+        '</div>' +
+      '</div>';
+    }
+  });
+
+  if (!visibleIdx) { toast('Nothing to print — all items are deleted or invalid', 'info'); return; }
+
+  var printedAt = new Date().toLocaleDateString('en-ZA', { year:'numeric', month:'long', day:'numeric' });
+  var doc = '<!DOCTYPE html><html lang="en"><head>' +
+    '<meta charset="UTF-8">' +
+    '<title>' + escHtml(currentRep.name) + ' — Service Program</title>' +
+    '<style>' +
+      '@page { size: A4; margin: 18mm 16mm; }' +
+      '* { box-sizing: border-box; }' +
+      'body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; line-height: 1.5; margin: 0; padding: 0; }' +
+      '.prg-header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 14px; margin-bottom: 22px; }' +
+      '.prg-church { font-size: 12pt; color: #555; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }' +
+      '.prg-rep-name { font-size: 22pt; font-weight: 700; margin: 0 0 6px 0; }' +
+      '.prg-date { font-size: 12pt; color: #333; font-style: italic; }' +
+      '.prg-items-heading { font-size: 11pt; text-transform: uppercase; letter-spacing: 0.08em; color: #666; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }' +
+      '.prg-item { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px dotted #ddd; page-break-inside: avoid; }' +
+      '.prg-item:last-child { border-bottom: none; }' +
+      '.prg-num { font-size: 14pt; font-weight: 700; color: #666; min-width: 28px; text-align: right; }' +
+      '.prg-body { flex: 1; }' +
+      '.prg-type { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.1em; color: #888; margin-bottom: 2px; }' +
+      '.prg-title { font-size: 13pt; font-weight: 700; margin-bottom: 2px; }' +
+      '.prg-writer { font-size: 10pt; color: #555; font-style: italic; margin-bottom: 2px; }' +
+      '.prg-meta { font-size: 10pt; color: #555; }' +
+      '.prg-note { font-size: 10pt; color: #444; margin-top: 4px; line-height: 1.4; }' +
+      '.prg-segment .prg-type, .prg-announcement .prg-type { color: #C05A08; }' +
+      '.prg-footer { margin-top: 28px; padding-top: 10px; border-top: 1px solid #ccc; font-size: 9pt; color: #888; text-align: center; }' +
+      '@media print { .no-print { display: none !important; } .prg-header { page-break-after: avoid; } body { -webkit-print-color-adjust: exact; } }' +
+      '.no-print-bar { position: fixed; top: 0; left: 0; right: 0; background: #E8650A; color: #fff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; font-family: Arial, sans-serif; font-size: 14px; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }' +
+      '.no-print-bar button { background: #fff; color: #C05A08; border: none; border-radius: 6px; padding: 7px 14px; font-weight: 700; font-size: 13px; cursor: pointer; margin-left: 8px; }' +
+      '.no-print-bar button:hover { background: #FFF0E6; }' +
+      'body.with-bar { padding-top: 50px; }' +
+    '</style>' +
+    '</head><body class="with-bar">' +
+    '<div class="no-print-bar no-print">' +
+      '<span>Preview — use the browser Print option or click Print below to save as PDF.</span>' +
+      '<span><button onclick="window.print()">Print / Save as PDF</button><button onclick="window.close()">Close</button></span>' +
+    '</div>' +
+    '<div class="prg-header">' +
+      '<div class="prg-church">Order of Service</div>' +
+      '<h1 class="prg-rep-name">' + escHtml(currentRep.name) + '</h1>' +
+      (dateStr ? '<div class="prg-date">' + escHtml(dateStr) + '</div>' : '') +
+    '</div>' +
+    '<div class="prg-items-heading">Programme (' + visibleIdx + ' item' + (visibleIdx !== 1 ? 's' : '') + ')</div>' +
+    blocksHtml +
+    '<div class="prg-footer">Prepared with HymnDesk &middot; ' + escHtml(printedAt) + '</div>' +
+    '</body></html>';
+
+  var win = window.open('', '_blank', 'width=900,height=1000');
+  if (!win) { toast('Popup blocked — allow popups to print the programme', 'error'); return; }
+  win.document.open();
+  win.document.write(doc);
+  win.document.close();
+  // Give the browser a moment to render before prompting print
+  setTimeout(function(){
+    try { win.focus(); } catch(e){}
+  }, 300);
+}
 function exportData(){
   // Export user data + current hymns from memory (not from localStorage)
   const payload = {
@@ -5186,6 +5351,316 @@ function _purgeExpiredSoftDeletes(){
 on('open-recently-deleted-btn', 'click', openRecentlyDeleted);
 on('close-recently-deleted-modal', 'click', function(){ closeModal('recently-deleted-modal'); });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// HYMN OF THE DAY — admin weekly scheduler + home-screen featured card
+// ═══════════════════════════════════════════════════════════════════════════
+// Schedule is stored locally per-device: array of {date:'YYYY-MM-DD', hymnId, note}.
+// Home screen shows today's scheduled hymn as a prominent card. Past entries
+// older than 30 days are pruned on load. Scheduled entries on THIS device do
+// not automatically appear on OTHER devices — that would require backend sync
+// (flagged for Bundle C).
+const HOTD_KEY = 'lh_hotd_schedule';
+const HOTD_PRUNE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function _hotdToday(){
+  var d = new Date();
+  var yyyy = d.getFullYear();
+  var mm = String(d.getMonth() + 1).padStart(2, '0');
+  var dd = String(d.getDate()).padStart(2, '0');
+  return yyyy + '-' + mm + '-' + dd;
+}
+
+function _hotdLoad(){
+  try {
+    var raw = localStorage.getItem(HOTD_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e){ return []; }
+}
+
+function _hotdSave(list){
+  try { localStorage.setItem(HOTD_KEY, JSON.stringify(list)); } catch(e){}
+}
+
+function _hotdPruneOld(){
+  var now = Date.now();
+  var list = _hotdLoad();
+  var before = list.length;
+  list = list.filter(function(entry){
+    var d = new Date(entry.date + 'T00:00:00').getTime();
+    return (now - d) < HOTD_PRUNE_MS;
+  });
+  if (list.length !== before) _hotdSave(list);
+}
+
+function renderHotdCard(){
+  var card = document.getElementById('hotd-home-card');
+  if (!card) return;
+  var today = _hotdToday();
+  var list = _hotdLoad();
+  var entry = list.find(function(e){ return e.date === today; });
+  if (!entry) { card.style.display = 'none'; card.innerHTML = ''; return; }
+  var h = hymns.find(function(x){ return x.id === entry.hymnId && !x.deletedAt; });
+  if (!h) { card.style.display = 'none'; card.innerHTML = ''; return; }
+  var noteHtml = entry.note
+    ? '<p style="margin:10px 0 0;font-size:13px;color:rgba(255,255,255,0.88);line-height:1.55;font-style:italic">' + escHtml(entry.note) + '</p>'
+    : '';
+  card.style.display = '';
+  card.innerHTML = '<div style="background:linear-gradient(135deg,#C05A08,#E8650A);color:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 6px 20px rgba(232,101,10,0.25);cursor:pointer" id="hotd-inner">' +
+    '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;opacity:0.85;margin-bottom:6px">Hymn of the Day</div>' +
+    '<div style="font-family:\'Playfair Display\',serif;font-size:22px;font-weight:700;line-height:1.25">' + escHtml(h.title) + '</div>' +
+    '<div style="font-size:13px;opacity:0.85;margin-top:4px">' + escHtml(h.book) + ' &middot; #' + h.number + (h.writer ? ' &middot; by ' + escHtml(h.writer) : '') + '</div>' +
+    noteHtml +
+    '<div style="margin-top:12px;display:inline-block;padding:6px 14px;background:rgba(255,255,255,0.2);border-radius:7px;font-size:12px;font-weight:600">Tap to open</div>' +
+  '</div>';
+  var inner = document.getElementById('hotd-inner');
+  if (inner) inner.addEventListener('click', function(){
+    // Open in reading/projection view depending on device mode
+    try { startProjection(h, {}); } catch(e){ console.error('HOTD open failed', e); }
+  });
+}
+
+function openHotdModal(){
+  _hotdPopulateHymnDropdown();
+  _hotdResetForm();
+  _hotdRenderList();
+  openModal('hotd-modal');
+}
+
+function _hotdPopulateHymnDropdown(){
+  var sel = document.getElementById('hotd-hymn');
+  if (!sel) return;
+  // Sort hymns alphabetically by title, exclude deleted
+  var active = hymns.filter(function(h){ return !h.deletedAt; }).slice().sort(function(a,b){
+    return a.title.localeCompare(b.title);
+  });
+  sel.innerHTML = '<option value="">Select a hymn</option>' + active.map(function(h){
+    return '<option value="' + escHtml(h.id) + '">' + escHtml(h.title) + ' — ' + escHtml(h.book) + ' #' + h.number + '</option>';
+  }).join('');
+}
+
+function _hotdResetForm(){
+  var d = document.getElementById('hotd-date');
+  var h = document.getElementById('hotd-hymn');
+  var n = document.getElementById('hotd-note');
+  var err = document.getElementById('hotd-error');
+  if (d) d.value = _hotdToday();
+  if (h) h.value = '';
+  if (n) n.value = '';
+  if (err) err.classList.remove('show');
+}
+
+function _hotdSaveEntry(){
+  var dateVal = document.getElementById('hotd-date').value;
+  var hymnId  = document.getElementById('hotd-hymn').value;
+  var note    = document.getElementById('hotd-note').value.trim();
+  var err     = document.getElementById('hotd-error');
+  if (!dateVal || !hymnId) {
+    err.textContent = 'Both date and hymn are required.';
+    err.classList.add('show');
+    return;
+  }
+  var list = _hotdLoad();
+  // Replace existing entry for same date if any (one hymn per day)
+  list = list.filter(function(e){ return e.date !== dateVal; });
+  list.push({ date: dateVal, hymnId: hymnId, note: note, createdAt: Date.now() });
+  list.sort(function(a,b){ return a.date.localeCompare(b.date); });
+  _hotdSave(list);
+  _hotdResetForm();
+  _hotdRenderList();
+  renderHotdCard();
+  toast('Scheduled', 'success');
+}
+
+function _hotdRenderList(){
+  var wrap = document.getElementById('hotd-list');
+  if (!wrap) return;
+  var list = _hotdLoad();
+  var today = _hotdToday();
+  // Show today + future, up to 30 days out
+  var upcoming = list.filter(function(e){ return e.date >= today; }).slice(0, 30);
+  if (!upcoming.length) {
+    wrap.innerHTML = '<p style="text-align:center;padding:18px;color:var(--text3);font-size:13px">No upcoming Hymn-of-the-Day entries scheduled. Use the form above to add one.</p>';
+    return;
+  }
+  wrap.innerHTML = upcoming.map(function(e){
+    var h = hymns.find(function(x){ return x.id === e.hymnId; });
+    var title = h ? h.title : '(hymn missing or deleted)';
+    var ref = h ? (h.book + ' #' + h.number) : '';
+    var dLabel = new Date(e.date + 'T00:00:00').toLocaleDateString('en-ZA', { weekday:'short', year:'numeric', month:'short', day:'numeric' });
+    var isToday = e.date === today;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:' + (isToday ? 'linear-gradient(135deg,#FFF8F3,#FFF0E6)' : 'var(--bg2)') + ';border:1px solid ' + (isToday ? '#FFD9B8' : 'var(--border)') + ';border-radius:9px;margin-bottom:6px">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-size:11px;font-weight:700;color:' + (isToday ? '#C05A08' : 'var(--text3)') + ';text-transform:uppercase;letter-spacing:0.06em">' + escHtml(dLabel) + (isToday ? ' &middot; Today' : '') + '</div>' +
+        '<div style="font-weight:600;font-size:13px;color:var(--text);margin-top:2px">' + escHtml(title) + '</div>' +
+        (ref ? '<div style="font-size:11px;color:var(--text3);margin-top:1px">' + escHtml(ref) + '</div>' : '') +
+        (e.note ? '<div style="font-size:11px;color:var(--text3);margin-top:3px;font-style:italic">&ldquo;' + escHtml(e.note.substring(0, 90)) + (e.note.length > 90 ? '…' : '') + '&rdquo;</div>' : '') +
+      '</div>' +
+      '<button class="btn btn-red" data-hotd-del="' + escHtml(e.date) + '" style="padding:5px 10px;font-size:11px;flex-shrink:0">Remove</button>' +
+    '</div>';
+  }).join('');
+  wrap.querySelectorAll('[data-hotd-del]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var date = b.getAttribute('data-hotd-del');
+      var list = _hotdLoad().filter(function(e){ return e.date !== date; });
+      _hotdSave(list);
+      _hotdRenderList();
+      renderHotdCard();
+      toast('Removed', 'info');
+    });
+  });
+}
+
+on('manage-hotd-btn', 'click', openHotdModal);
+on('close-hotd-modal', 'click', function(){ closeModal('hotd-modal'); });
+on('hotd-save-btn', 'click', _hotdSaveEntry);
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ANALYTICS DASHBOARD — admin view of local usage data
+// ═══════════════════════════════════════════════════════════════════════════
+// Aggregates the device's serviceHistory into top-projected hymns, books,
+// languages, and a 30-day activity timeline. Honest about scope: this is
+// LOCAL device data only. Cross-device analytics need GAS backend queries
+// which are not built yet.
+function openAnalytics(){
+  renderAnalytics();
+  openModal('analytics-modal');
+}
+
+function renderAnalytics(){
+  var body = document.getElementById('analytics-body');
+  if (!body) return;
+  var history = (typeof serviceHistory !== 'undefined' && Array.isArray(serviceHistory)) ? serviceHistory : [];
+  var now = Date.now();
+  var last30 = history.filter(function(h){ return h.projectedAt && (now - h.projectedAt) < 30 * 24 * 60 * 60 * 1000; });
+  var last7  = history.filter(function(h){ return h.projectedAt && (now - h.projectedAt) < 7  * 24 * 60 * 60 * 1000; });
+
+  // Count hymn mentions across all history
+  var hymnCounts = {};   // hymn ref string -> count
+  var bookCounts = {};   // book name -> count
+  var langCounts = {};   // language -> count
+  history.forEach(function(rec){
+    if (!Array.isArray(rec.hymns)) return;
+    rec.hymns.forEach(function(ref){
+      hymnCounts[ref] = (hymnCounts[ref] || 0) + 1;
+      // ref format: "#<num> (<language>)"
+      var m = ref.match(/^#(\d+)\s*\(([^)]+)\)/);
+      if (m) {
+        var lang = m[2];
+        langCounts[lang] = (langCounts[lang] || 0) + 1;
+      }
+    });
+  });
+
+  function topEntries(obj, limit){
+    return Object.keys(obj).map(function(k){ return { k: k, n: obj[k] }; })
+      .sort(function(a,b){ return b.n - a.n; })
+      .slice(0, limit);
+  }
+
+  var topHymns = topEntries(hymnCounts, 10);
+  var topLangs = topEntries(langCounts, 6);
+
+  // Total hymn count (active) and deleted count
+  var active = hymns.filter(function(h){ return !h.deletedAt; }).length;
+  var deleted = hymns.filter(function(h){ return h.deletedAt; }).length;
+  var repCount = (typeof repertoires !== 'undefined' ? repertoires.length : 0);
+  var favCount = hymns.filter(function(h){ return !h.deletedAt && h.favourite; }).length;
+  var customCount = 0;
+  try { customCount = (JSON.parse(localStorage.getItem('lh_items') || '[]')).length; } catch(e){}
+
+  // Usage queue — count events pending sync and total of recent 7 days
+  var usageQueue = [];
+  try { usageQueue = JSON.parse(localStorage.getItem('hd_usage_queue') || '[]'); } catch(e){}
+  var recentQueuedOpens = usageQueue.filter(function(e){
+    return e.type === 'open' && new Date(e.timestamp).getTime() > (now - 7 * 24 * 60 * 60 * 1000);
+  }).length;
+
+  function statCard(label, value, sublabel){
+    return '<div style="flex:1;min-width:130px;background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:14px">' +
+      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:4px">' + escHtml(label) + '</div>' +
+      '<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;color:var(--text);line-height:1">' + String(value) + '</div>' +
+      (sublabel ? '<div style="font-size:11px;color:var(--text4);margin-top:4px">' + escHtml(sublabel) + '</div>' : '') +
+    '</div>';
+  }
+
+  var html = '';
+
+  // Stat tiles
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">' +
+    statCard('Projections · last 7 days', last7.length, 'Repertoires opened for projection') +
+    statCard('Projections · last 30 days', last30.length) +
+    statCard('Active hymns', active, deleted ? deleted + ' in Recently deleted' : '') +
+    statCard('Repertoires', repCount, favCount + ' favourite hymns') +
+  '</div>';
+
+  if (customCount > 0) {
+    html += '<div style="background:#FFF8F3;border:1px solid #FFD9B8;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#B05007">' +
+      'Custom hymns on this device: <strong>' + customCount + '</strong>' +
+    '</div>';
+  }
+
+  // Top hymns
+  html += '<div style="margin-bottom:18px">' +
+    '<div class="section-label" style="margin-bottom:8px">Top projected hymns (all time)</div>';
+  if (!topHymns.length) {
+    html += '<p style="color:var(--text3);font-size:13px;padding:14px;background:var(--bg2);border-radius:9px">No projection history yet. Hymns projected from repertoires will appear here.</p>';
+  } else {
+    var maxN = topHymns[0].n;
+    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px">';
+    topHymns.forEach(function(e, i){
+      var pct = Math.round((e.n / maxN) * 100);
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:5px 0">' +
+        '<span style="font-size:11px;font-weight:700;color:var(--text3);min-width:18px">' + (i+1) + '.</span>' +
+        '<span style="flex:1;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(e.k) + '</span>' +
+        '<div style="width:100px;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;flex-shrink:0">' +
+          '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#E8650A,#d45a08)"></div>' +
+        '</div>' +
+        '<span style="font-size:12px;font-weight:600;color:#C05A08;min-width:28px;text-align:right">' + e.n + '</span>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Top languages
+  html += '<div style="margin-bottom:18px">' +
+    '<div class="section-label" style="margin-bottom:8px">Languages projected (by hymn count)</div>';
+  if (!topLangs.length) {
+    html += '<p style="color:var(--text3);font-size:13px;padding:14px;background:var(--bg2);border-radius:9px">No data yet.</p>';
+  } else {
+    var totalLangMentions = topLangs.reduce(function(s,e){ return s + e.n; }, 0);
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    topLangs.forEach(function(e){
+      var share = Math.round((e.n / totalLangMentions) * 100);
+      html += '<span style="padding:6px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text)"><strong>' + escHtml(e.k) + '</strong> &middot; ' + e.n + ' (' + share + '%)</span>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Pending sync
+  html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">' +
+    '<div class="section-label" style="margin-bottom:6px">Device sync</div>' +
+    '<div style="font-size:13px;color:var(--text2);line-height:1.55">' +
+      (recentQueuedOpens > 0
+        ? 'App opens queued locally waiting for sync: <strong>' + usageQueue.length + '</strong> event(s), including <strong>' + recentQueuedOpens + '</strong> open(s) in the last 7 days. These will flush to the server when the device is online.'
+        : 'Usage queue is empty or all events are synced.') +
+    '</div>' +
+  '</div>';
+
+  // Honest caveat
+  html += '<div style="font-size:11px;color:var(--text4);padding:10px 12px;background:var(--bg3);border-radius:9px;line-height:1.5">' +
+    '<strong style="color:var(--text3)">Scope of this view:</strong> data is aggregated from this device\'s local service history only. For aggregate user counts across all installs — who, when, from where — the Google Apps Script backend will need a query endpoint (currently it records usage but does not query it). That work is planned as a separate session.' +
+  '</div>';
+
+  body.innerHTML = html;
+}
+
+on('manage-analytics-btn', 'click', openAnalytics);
+on('close-analytics-modal', 'click', function(){ closeModal('analytics-modal'); });
+
+
 // ── USER PROFILE EDIT ─────────────────────────────────────────────────────────
 function openProfileEdit(){
   if(!currentUser) return;
@@ -5807,6 +6282,9 @@ syncHymnsFromGithub().then(function(){
   flushRatingQueue();
   // Permanently remove soft-deleted items older than 30 days
   try { if (typeof _purgeExpiredSoftDeletes === 'function') _purgeExpiredSoftDeletes(); } catch(e){}
+  // Prune old Hymn-of-the-Day entries, then render today's featured card
+  try { if (typeof _hotdPruneOld === 'function') _hotdPruneOld(); } catch(e){}
+  try { if (typeof renderHotdCard === 'function') renderHotdCard(); } catch(e){}
   // Offer to resume a projection interrupted in the last 3 hours
   try { if (typeof _checkResumeOnLoad === 'function') _checkResumeOnLoad(); } catch(e){}
 });
@@ -7051,7 +7529,7 @@ renderHeaderYtLink();
 </div>
 
 <!-- ── PITCH PIPE MODAL ────────────────────────────────────────────────────── -->
-<div class="modal-overlay" id="pitch-pipe-modal">
+<div class="modal-overlay" id="pitch-pipe-modal" style="z-index:270">
   <div class="modal-box narrow" style="max-width:440px">
     <button class="modal-close" onclick="closeModal('pitch-pipe-modal');stopAllPitchNotes()"><svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
     <h3 class="modal-title">Pitch pipe</h3>
