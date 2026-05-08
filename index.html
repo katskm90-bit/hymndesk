@@ -1829,11 +1829,10 @@ const BG_LABELS=['Black','Navy','Purple','Vignette','Carbon'];
 const SEGMENT_PRESETS=['Sabbath School','Divine Service','Announcements','Special Music','Pastoral Prayer','Offering Appeal','Sermon','Mission Report','Closing','Welcome','Children\'s Story','Vespers','Prayer Meeting','Communion'];
 
 // ── ADMIN AUTHENTICATION ─────────────────────────────────────────────────────
-// Password is verified via SHA-256 hash — the raw password never appears in source.
-// Hash: SHA-256 of the admin password stored as hex.
-// To regenerate: crypto.subtle.digest('SHA-256', new TextEncoder().encode(pwd))
-//   then convert buffer to hex string.
-// Current hash corresponds to the configured admin password.
+// Admin password is verified by SHA-256 hash. The hash below is one-way and
+// does not reveal the password. The raw password is never stored in source.
+// To rotate the password, replace the hash with the SHA-256 of the new
+// password and commit. Hash format: 64 lowercase hex characters.
 const _ADMIN_HASH = '921ad2ff131a37d593201de326cdcf074a0f7d20d37317efc490a5b0677ba029';
 
 let isAdmin = false;
@@ -1870,11 +1869,9 @@ async function _submitAdminPwd() {
   if (!pwd) { input.focus(); return; }
   if (btn) { btn.textContent = 'Checking…'; btn.style.opacity = '0.7'; }
   try {
-    // Primary: hash check against stored SHA-256
+    // Hash check against stored SHA-256
     const hash = await _hashPwd(pwd);
-    // Fallback comparator using obfuscated value (belt-and-braces)
-    const legacy = (pwd === atob('TWF6aWJ1a29AMjY='));
-    if (hash === _ADMIN_HASH || legacy) {
+    if (hash === _ADMIN_HASH) {
       isAdmin = true;
       sessionStorage.setItem('lh_admin_auth', 'true');
       document.getElementById('admin-pwd-overlay').style.display = 'none';
@@ -1885,18 +1882,12 @@ async function _submitAdminPwd() {
       input.focus();
     }
   } catch(e) {
-    // crypto.subtle not available (non-HTTPS dev) — fall back to legacy check only
-    const legacy = (pwd === atob('TWF6aWJ1a29AMjY='));
-    if (legacy) {
-      isAdmin = true;
-      sessionStorage.setItem('lh_admin_auth', 'true');
-      document.getElementById('admin-pwd-overlay').style.display = 'none';
-      location.reload();
-    } else {
-      err.style.display = 'block';
-      input.value = '';
-      input.focus();
-    }
+    // crypto.subtle is unavailable (typically non-HTTPS dev environments).
+    // Refuse to authenticate rather than fall back to a weaker check.
+    err.textContent = 'Admin login requires a secure (HTTPS) connection.';
+    err.style.display = 'block';
+    input.value = '';
+    input.focus();
   } finally {
     if (btn) { btn.textContent = 'Unlock Admin'; btn.style.opacity = '1'; }
   }
