@@ -59884,64 +59884,6 @@
       "favourite": false
     }
   ],
-  "repertoires": [
-    {
-      "id": "id_1776617346694",
-      "name": "t5t",
-      "date": "2026-04-25",
-      "createdAt": 1776617521550
-    }
-  ],
-  "repItems": [
-    {
-      "id": "id_1776617346695",
-      "repId": "id_1776617346694",
-      "hymnId": "sotho_18_1775891210514_17",
-      "itemType": "hymn",
-      "order": 1,
-      "key": "",
-      "repeatConfig": {},
-      "createdAt": 1776617530006
-    },
-    {
-      "id": "id_1776617346696",
-      "repId": "id_1776617346694",
-      "hymnId": "sotho_21_1775891210514_20",
-      "itemType": "hymn",
-      "order": 2,
-      "key": "",
-      "repeatConfig": {},
-      "createdAt": 1776617533541
-    },
-    {
-      "id": "id_1776617346697",
-      "repId": "id_1776617346694",
-      "hymnId": "venda_27_1775891210528_26",
-      "itemType": "hymn",
-      "order": 3,
-      "key": "",
-      "repeatConfig": {},
-      "createdAt": 1776617540733
-    },
-    {
-      "id": "id_1776621272471",
-      "repId": "id_1776617346694",
-      "itemType": "segment",
-      "segName": "Sabbath School",
-      "segNote": "",
-      "order": 0,
-      "createdAt": 1776621299667
-    },
-    {
-      "id": "id_1776621272472",
-      "repId": "id_1776617346694",
-      "itemType": "announcement",
-      "annHeadline": "xx",
-      "annBody": "xs",
-      "order": 4,
-      "createdAt": 1776621325476
-    }
-  ],
   "bannerSlides": [
     {
       "headline": "Spirit Of Praise NEXT Level Tour",
@@ -59988,10 +59930,25 @@
       "bgPosY": 0
     }
   ],
-  "favourites": [
-    "id_1775587448218",
-    "id_1775587448221",
-    "id_1775589632396"
+  "donateCard": {
+    "icon": "💵",
+    "title": "Support This Ministry",
+    "text": "Your contribution keeps this hymn library free and growing for everyone.",
+    "visible": true
+  },
+  "info": {
+    "about": "Brief explanation of project and its purpose",
+    "contact": "Contact number: 011 568 2792\nEmail address: info@serenzadeluxeatelier.co.za"
+  },
+  "headerYoutubeLink": "",
+  "hotdSchedule": [
+    {
+      "date": "2026-05-09",
+      "hymnId": "xhosa_202_1775858134418201",
+      "note": "Be Blessed",
+      "createdAt": 1778356103120
+    }
   ],
-  "exportedAt": "2026-05-09T11:54:00.993Z"
+  "broadcast": null,
+  "publishedAt": 1778356413275
 }
