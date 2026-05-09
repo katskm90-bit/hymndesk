@@ -1831,8 +1831,7 @@ const SEGMENT_PRESETS=['Sabbath School','Divine Service','Announcements','Specia
 // ── ADMIN AUTHENTICATION ─────────────────────────────────────────────────────
 // Admin password is verified by SHA-256 hash. The hash below is one-way and
 // does not reveal the password. The raw password is never stored in source.
-// To rotate the password, replace the hash with the SHA-256 of the new
-// password and commit. Hash format: 64 lowercase hex characters.
+// To rotate the password, generate a new SHA-256 hash and replace the value.
 const _ADMIN_HASH = '921ad2ff131a37d593201de326cdcf074a0f7d20d37317efc490a5b0677ba029';
 
 let isAdmin = false;
@@ -1869,7 +1868,7 @@ async function _submitAdminPwd() {
   if (!pwd) { input.focus(); return; }
   if (btn) { btn.textContent = 'Checking…'; btn.style.opacity = '0.7'; }
   try {
-    // Hash check against stored SHA-256
+    // Hash check against stored SHA-256 — the only verification path.
     const hash = await _hashPwd(pwd);
     if (hash === _ADMIN_HASH) {
       isAdmin = true;
@@ -7352,6 +7351,38 @@ closeReadingView = function() {
 
 applyAccessControls();
 renderHeaderYtLink();
+
+// ── EXPOSE INLINE-HANDLER FUNCTIONS TO GLOBAL SCOPE ──────────────────────────
+// Everything in this script is wrapped in `if (!IS_PROJECTOR_WINDOW) { ... }`,
+// which is a block. In sloppy mode, plain `function` declarations get hoisted
+// out of a top-level block to the surrounding scope (Annex B B.3.3), but
+// `async function` declarations and `const`-assigned arrow functions DO NOT.
+// HTML inline event handlers (onclick, oninput, onkeydown, etc.) can only see
+// names on the global window object, so any async function — or function we
+// want to be safe — must be exposed here.
+//
+// If you add a new inline handler in HTML or in any innerHTML template, also
+// add the corresponding window.X = X line below. Failing to do so produces a
+// silent ReferenceError in the browser console with no user-visible feedback.
+window._submitAdminPwd     = _submitAdminPwd;
+window._cancelAdminPwd     = _cancelAdminPwd;
+window._hashPwd            = _hashPwd;
+window.loadUserMgmt        = loadUserMgmt;
+window.filterUserList      = filterUserList;
+window.syncHymnsFromGithub = syncHymnsFromGithub;
+window.loadAppHealth       = loadAppHealth;
+window.handleGlobalSearch  = handleGlobalSearch;
+window.openModal           = openModal;
+window.closeModal          = closeModal;
+window.switchInboxTab      = switchInboxTab;
+window.openHymnFromSearch  = openHymnFromSearch;
+window.openAdEnquiry       = openAdEnquiry;
+window.openDonateEditModal = openDonateEditModal;
+window.applyProjTheme      = applyProjTheme;
+window.presenterJumpTo     = presenterJumpTo;
+window.presenterJumpToRepItem = presenterJumpToRepItem;
+window.stopAllPitchNotes   = stopAllPitchNotes;
+window.toast               = toast;
 
 } // end of if (!IS_PROJECTOR_WINDOW) — main app block
 </script>
