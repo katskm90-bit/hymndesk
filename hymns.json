@@ -59916,12 +59916,18 @@
       "createdAt": 1778356103120
     },
     {
-      "date": "2026-05-10",
-      "hymnId": "english_20_1775891210476_19",
+      "date": "2026-05-11",
+      "hymnId": "tswana_110_1775891210522_109",
       "note": "",
-      "createdAt": 1778400442492
+      "createdAt": 1778400646396
     }
   ],
-  "broadcast": null,
-  "publishedAt": 1778400449535
+  "broadcast": {
+    "msg": "Happy Mothers day to all the special ladies out there, God Bless you",
+    "type": "info",
+    "expires": 1,
+    "sentAt": 1778400703126,
+    "expiresAt": 1778487103126
+  },
+  "publishedAt": 1778400715745
 }
