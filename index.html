@@ -2206,12 +2206,16 @@ var CloudSync = (function(){
   // ── PULL: fetch all user data and merge into local state ─────────────────
   function pullAll(){
     if (!isConfigured() || !getUserId()) return Promise.resolve();
+    var uid = getUserId();
+    // user_id filter is required on every pull so the simple RLS policies
+    // can verify the request is for the correct user. Encoded for safety.
+    var f = '&user_id=eq.' + encodeURIComponent(uid);
     log('pull start');
     return Promise.all([
-      rpc('GET', 'user_repertoires?select=*&order=updated_at.desc'),
-      rpc('GET', 'user_repertoire_items?select=*&order=item_order.asc'),
-      rpc('GET', 'user_favourites?select=*'),
-      rpc('GET', 'user_service_history?select=*&order=played_at.desc&limit=200')
+      rpc('GET', 'user_repertoires?select=*' + f + '&order=updated_at.desc'),
+      rpc('GET', 'user_repertoire_items?select=*' + f + '&order=item_order.asc'),
+      rpc('GET', 'user_favourites?select=*' + f),
+      rpc('GET', 'user_service_history?select=*' + f + '&order=played_at.desc&limit=200')
     ]).then(function(results){
       var cloudReps = results[0] || [];
       var cloudItems = results[1] || [];
@@ -2235,8 +2239,10 @@ var CloudSync = (function(){
         } catch(e){}
       }
       log('pull done', { reps: cloudReps.length, items: cloudItems.length, favs: cloudFavs.length, history: cloudHistory.length, changed: changed });
+      try { console.log('[CloudSync] pull ok — reps:' + cloudReps.length + ' items:' + cloudItems.length + ' favs:' + cloudFavs.length + ' history:' + cloudHistory.length); } catch(e){}
     }).catch(function(err){
       log('pull failed', err && err.message);
+      try { console.warn('[CloudSync] pull FAILED:', err && err.message ? err.message : err); } catch(e){}
     });
   }
 
@@ -2475,10 +2481,11 @@ var CloudSync = (function(){
               && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 20
               && SUPABASE_URL.indexOf('__SUPABASE_URL__') === -1);
     if (!enabled) {
-      log('not configured — sync disabled');
+      // Always log this — it's a setup issue users need to know about
+      try { console.warn('[CloudSync] DISABLED — Supabase URL or anon key not configured. Replace __SUPABASE_URL__ and __SUPABASE_ANON_KEY__ in index.html.'); } catch(e){}
       return;
     }
-    log('configured — sync enabled');
+    try { console.log('[CloudSync] enabled — Supabase URL configured, ready to sync'); } catch(e){}
     // If a user is already signed in (returning visitor), pull immediately
     if (getUserId()) {
       setTimeout(onSignIn, 1500);
