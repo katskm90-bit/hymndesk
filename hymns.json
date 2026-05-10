@@ -59914,8 +59914,14 @@
       "hymnId": "xhosa_202_1775858134418201",
       "note": "Be Blessed",
       "createdAt": 1778356103120
+    },
+    {
+      "date": "2026-05-10",
+      "hymnId": "english_20_1775891210476_19",
+      "note": "",
+      "createdAt": 1778400442492
     }
   ],
   "broadcast": null,
-  "publishedAt": 1778357410157
+  "publishedAt": 1778400449535
 }
