@@ -1930,6 +1930,10 @@ function safeLSSet(key, val){
 function save(){
   // Hymns are NOT saved to localStorage — they sync fresh from GitHub each load.
   // Favourites are preserved in the favMap during sync.
+  // Stamp updated_at on every record so cloud merge can resolve conflicts
+  var now = Date.now();
+  (repertoires || []).forEach(function(r){ if (!r._updatedAt) r._updatedAt = now; });
+  (repItems    || []).forEach(function(i){ if (!i._updatedAt) i._updatedAt = now; });
   safeLSSet('lh_reps',      JSON.stringify(repertoires));
   safeLSSet('lh_items',     JSON.stringify(repItems));
   safeLSSet('lh_slides',    JSON.stringify(bannerSlides));
@@ -1940,13 +1944,618 @@ function save(){
   // Cap feedback at 100 entries
   var trimmedFeedback = (feedbackList||[]).slice(0,100);
   safeLSSet('lh_feedback',  JSON.stringify(trimmedFeedback));
+  // Trigger cloud sync of user data in the background (if signed in & configured)
+  try {
+    if (typeof CloudSync !== 'undefined' && CloudSync.scheduleRepsPush) {
+      CloudSync.scheduleRepsPush();
+      CloudSync.scheduleItemsPush();
+      CloudSync.scheduleHistoryPush();
+    }
+  } catch(e){}
 }
 
 function saveFavourites(){
   // Persist only hymn IDs that are favourited — tiny footprint
   var favIds = hymns.filter(h=>h.favourite).map(h=>h.id);
   safeLSSet('lh_favs', JSON.stringify(favIds));
+  // Trigger cloud sync of favourites in the background
+  try { if (typeof CloudSync !== 'undefined' && CloudSync.scheduleFavouritesPush) CloudSync.scheduleFavouritesPush(); } catch(e){}
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── CLOUD SYNC ENGINE (Supabase) ───────────────────────────────────────────
+// Cross-device sync for user data: repertoires, repertoire items, favourites,
+// service history. Sign in once, your data follows you.
+//
+// Architecture:
+//   - Local writes (save(), saveFavourites()) trigger a debounced cloud push.
+//   - Sign-in / app open / 5-minute timer trigger a cloud pull.
+//   - Conflicts resolved by updated_at timestamp — latest write wins.
+//   - Deletions are soft (deleted_at timestamp) so a delete on Device A isn't
+//     undone by Device B's stale copy. Hard-prune happens server-side later.
+//   - Push failures queue and retry with exponential backoff.
+//
+// Identity model: user_id comes from currentUser.id (set by GAS auth at sign in).
+// The Supabase anon key plus the x-user-id header gates row access via RLS.
+//
+// To rotate keys or change the project, update SUPABASE_URL and SUPABASE_ANON_KEY.
+// ════════════════════════════════════════════════════════════════════════════
+var CloudSync = (function(){
+  // ── CONFIGURATION ────────────────────────────────────────────────────────
+  var SUPABASE_URL      = 'https://qszwtpoqvnjstsbihrkv.supabase.co/rest/v1/';
+  var SUPABASE_ANON_KEY = 'sb_publishable_bVsE-Yv3f7fh873eTAxm2Q_tMU0-aJg';
+  var PUSH_DEBOUNCE_MS  = 1500;     // batch rapid edits before sending
+  var PULL_INTERVAL_MS  = 5 * 60 * 1000; // background pull every 5 min
+  var RETRY_BASE_MS     = 2000;     // exponential backoff start
+  var RETRY_MAX_MS      = 60000;    // cap retry delay at 1 min
+  var SYNC_FLAG_KEY     = 'lh_cloud_migrated_v1'; // first-time upload sentinel
+
+  // ── STATE ────────────────────────────────────────────────────────────────
+  var enabled = false;          // becomes true once a real Supabase URL is configured
+  var pullTimer = null;
+  var pushTimers = {};          // keyed by 'reps' / 'items' / 'favs' / 'history'
+  var retryDelays = {};         // current backoff per resource
+  var lastPullAt = 0;
+
+  // ── HELPERS ──────────────────────────────────────────────────────────────
+  function log(){ try { if (window.__SYNC_DEBUG) console.log.apply(console, ['[CloudSync]'].concat([].slice.call(arguments))); } catch(e){} }
+
+  function getUserId(){
+    return (typeof currentUser !== 'undefined' && currentUser && currentUser.id) ? currentUser.id : null;
+  }
+
+  function isConfigured(){
+    return enabled
+      && typeof SUPABASE_URL === 'string'
+      && SUPABASE_URL.indexOf('http') === 0
+      && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 20;
+  }
+
+  function headers(){
+    var h = {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json'
+    };
+    var uid = getUserId();
+    if (uid) h['x-user-id'] = uid;
+    return h;
+  }
+
+  // Generic REST call to Supabase. Path starts with the table name; method
+  // is GET/POST/PATCH/DELETE. Body is sent as JSON if present.
+  function rpc(method, path, body, extraHeaders){
+    if (!isConfigured()) return Promise.reject(new Error('not_configured'));
+    if (!getUserId()) return Promise.reject(new Error('not_signed_in'));
+    var url = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/' + path;
+    var opts = {
+      method: method,
+      headers: Object.assign({}, headers(), extraHeaders || {})
+    };
+    if (body !== undefined && body !== null) opts.body = JSON.stringify(body);
+    return fetch(url, opts).then(function(res){
+      if (!res.ok) {
+        return res.text().then(function(t){
+          var err = new Error('HTTP ' + res.status + ': ' + (t || ''));
+          err.status = res.status;
+          throw err;
+        });
+      }
+      return res.status === 204 ? null : res.json();
+    });
+  }
+
+  // ── REPERTOIRE PUSH ──────────────────────────────────────────────────────
+  // Upserts the local repertoires table to Supabase. We send everything the
+  // user owns — trivial size — and let the server merge by primary key.
+  function pushRepertoires(){
+    var uid = getUserId();
+    if (!uid) return Promise.resolve();
+    if (!repertoires || !repertoires.length && !_pendingDeletedReps().length) {
+      return Promise.resolve();
+    }
+    var now = Date.now();
+    var rows = repertoires.map(function(r){
+      return {
+        id: r.id,
+        user_id: uid,
+        name: r.name || '',
+        rep_date: r.date || null,
+        created_at: r.createdAt || now,
+        updated_at: r._updatedAt || now,
+        deleted_at: r.deletedAt || null,
+        payload: r._payload || null
+      };
+    }).concat(_pendingDeletedReps().map(function(r){
+      return {
+        id: r.id,
+        user_id: uid,
+        name: r.name || '',
+        rep_date: r.date || null,
+        created_at: r.createdAt || now,
+        updated_at: now,
+        deleted_at: r.deletedAt || now,
+        payload: null
+      };
+    }));
+    if (!rows.length) return Promise.resolve();
+    return rpc('POST', 'user_repertoires', rows, {
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    }).then(function(){
+      log('push reps ok', rows.length);
+      _clearPendingDeletedReps();
+      retryDelays.reps = RETRY_BASE_MS;
+    });
+  }
+
+  // ── REPERTOIRE ITEMS PUSH ────────────────────────────────────────────────
+  function pushRepItems(){
+    var uid = getUserId();
+    if (!uid) return Promise.resolve();
+    var now = Date.now();
+    var rows = (repItems || []).map(function(i){
+      return {
+        id: i.id,
+        user_id: uid,
+        rep_id: i.repId,
+        item_type: i.itemType || 'hymn',
+        hymn_id: i.hymnId || null,
+        seg_name: i.segName || null,
+        seg_note: i.segNote || null,
+        ann_headline: i.annHeadline || null,
+        ann_body: i.annBody || null,
+        item_key: i.key || null,
+        repeat_config: i.repeatConfig || null,
+        item_order: typeof i.order === 'number' ? i.order : 0,
+        created_at: i.createdAt || now,
+        updated_at: i._updatedAt || now,
+        deleted_at: i.deletedAt || null,
+        payload: i._payload || null
+      };
+    }).concat(_pendingDeletedItems().map(function(i){
+      return {
+        id: i.id,
+        user_id: uid,
+        rep_id: i.repId || '',
+        item_type: i.itemType || 'hymn',
+        hymn_id: i.hymnId || null,
+        seg_name: i.segName || null,
+        seg_note: i.segNote || null,
+        ann_headline: i.annHeadline || null,
+        ann_body: i.annBody || null,
+        item_key: null,
+        repeat_config: null,
+        item_order: 0,
+        created_at: i.createdAt || now,
+        updated_at: now,
+        deleted_at: i.deletedAt || now,
+        payload: null
+      };
+    }));
+    if (!rows.length) return Promise.resolve();
+    return rpc('POST', 'user_repertoire_items', rows, {
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    }).then(function(){
+      log('push items ok', rows.length);
+      _clearPendingDeletedItems();
+      retryDelays.items = RETRY_BASE_MS;
+    });
+  }
+
+  // ── FAVOURITES PUSH ──────────────────────────────────────────────────────
+  function pushFavourites(){
+    var uid = getUserId();
+    if (!uid) return Promise.resolve();
+    var now = Date.now();
+    var favIds = hymns.filter(function(h){ return h.favourite; }).map(function(h){ return h.id; });
+    var rows = favIds.map(function(hid){
+      return {
+        user_id: uid,
+        hymn_id: hid,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null
+      };
+    });
+    // Add soft-deletes for previously-favourited hymns now removed
+    var pendingDel = _pendingDeletedFavs();
+    pendingDel.forEach(function(hid){
+      rows.push({
+        user_id: uid,
+        hymn_id: hid,
+        created_at: now,
+        updated_at: now,
+        deleted_at: now
+      });
+    });
+    if (!rows.length) return Promise.resolve();
+    return rpc('POST', 'user_favourites', rows, {
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    }).then(function(){
+      log('push favs ok', rows.length);
+      _clearPendingDeletedFavs();
+      retryDelays.favs = RETRY_BASE_MS;
+    });
+  }
+
+  // ── SERVICE HISTORY PUSH ─────────────────────────────────────────────────
+  function pushServiceHistory(){
+    var uid = getUserId();
+    if (!uid) return Promise.resolve();
+    if (!serviceHistory || !serviceHistory.length) return Promise.resolve();
+    var rows = serviceHistory.map(function(h){
+      return {
+        id: h.id || (h.hymnId + ':' + (h.playedAt || h.at || Date.now())),
+        user_id: uid,
+        hymn_id: h.hymnId || null,
+        hymn_title: h.title || null,
+        hymn_book: h.book || null,
+        hymn_number: h.number ? String(h.number) : null,
+        played_at: h.playedAt || h.at || Date.now(),
+        context: h.context || null,
+        updated_at: Date.now(),
+        deleted_at: null,
+        payload: null
+      };
+    });
+    return rpc('POST', 'user_service_history', rows, {
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    }).then(function(){ log('push history ok', rows.length); retryDelays.history = RETRY_BASE_MS; });
+  }
+
+  // ── PULL: fetch all user data and merge into local state ─────────────────
+  function pullAll(){
+    if (!isConfigured() || !getUserId()) return Promise.resolve();
+    var uid = getUserId();
+    // user_id filter is required on every pull so the simple RLS policies
+    // can verify the request is for the correct user. Encoded for safety.
+    var f = '&user_id=eq.' + encodeURIComponent(uid);
+    log('pull start');
+    return Promise.all([
+      rpc('GET', 'user_repertoires?select=*' + f + '&order=updated_at.desc'),
+      rpc('GET', 'user_repertoire_items?select=*' + f + '&order=item_order.asc'),
+      rpc('GET', 'user_favourites?select=*' + f),
+      rpc('GET', 'user_service_history?select=*' + f + '&order=played_at.desc&limit=200')
+    ]).then(function(results){
+      var cloudReps = results[0] || [];
+      var cloudItems = results[1] || [];
+      var cloudFavs = results[2] || [];
+      var cloudHistory = results[3] || [];
+      var changed = mergeReps(cloudReps);
+      changed = mergeItems(cloudItems) || changed;
+      changed = mergeFavs(cloudFavs) || changed;
+      changed = mergeHistory(cloudHistory) || changed;
+      lastPullAt = Date.now();
+      if (changed) {
+        try { save(); saveFavourites(); } catch(e){}
+        // Re-render anything that may have changed
+        try { if (typeof renderRepList === 'function') renderRepList(); } catch(e){}
+        try { if (typeof renderBookGrid === 'function') renderBookGrid(); } catch(e){}
+        try {
+          if (currentRep && typeof renderRepDetail === 'function') {
+            var stillExists = repertoires.find(function(r){ return r.id === currentRep.id && !r.deletedAt; });
+            if (stillExists) renderRepDetail(stillExists);
+          }
+        } catch(e){}
+      }
+      log('pull done', { reps: cloudReps.length, items: cloudItems.length, favs: cloudFavs.length, history: cloudHistory.length, changed: changed });
+      try { console.log('[CloudSync] pull ok — reps:' + cloudReps.length + ' items:' + cloudItems.length + ' favs:' + cloudFavs.length + ' history:' + cloudHistory.length); } catch(e){}
+    }).catch(function(err){
+      log('pull failed', err && err.message);
+      try { console.warn('[CloudSync] pull FAILED:', err && err.message ? err.message : err); } catch(e){}
+    });
+  }
+
+  // ── MERGE FUNCTIONS — cloud rows + local data → reconciled local data ───
+  // Rule: latest updated_at wins. Soft-deleted (deleted_at) hides the row.
+  function mergeReps(cloudReps){
+    var changed = false;
+    var localById = {};
+    repertoires.forEach(function(r){ localById[r.id] = r; });
+    cloudReps.forEach(function(c){
+      var local = localById[c.id];
+      var cloudUpdated = c.updated_at || 0;
+      var localUpdated = (local && local._updatedAt) || (local && local.createdAt) || 0;
+      if (c.deleted_at) {
+        // Server says deleted — remove locally (or mark deleted)
+        if (local && !local.deletedAt) {
+          repertoires = repertoires.filter(function(r){ return r.id !== c.id; });
+          changed = true;
+        }
+        return;
+      }
+      if (!local) {
+        repertoires.push({
+          id: c.id,
+          name: c.name || '',
+          date: c.rep_date || '',
+          createdAt: c.created_at || Date.now(),
+          _updatedAt: cloudUpdated
+        });
+        changed = true;
+      } else if (cloudUpdated > localUpdated) {
+        local.name = c.name || local.name;
+        local.date = c.rep_date || local.date;
+        local._updatedAt = cloudUpdated;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function mergeItems(cloudItems){
+    var changed = false;
+    var localById = {};
+    repItems.forEach(function(i){ localById[i.id] = i; });
+    cloudItems.forEach(function(c){
+      var local = localById[c.id];
+      var cloudUpdated = c.updated_at || 0;
+      var localUpdated = (local && local._updatedAt) || (local && local.createdAt) || 0;
+      if (c.deleted_at) {
+        if (local) {
+          repItems = repItems.filter(function(i){ return i.id !== c.id; });
+          changed = true;
+        }
+        return;
+      }
+      var rebuilt = {
+        id: c.id,
+        repId: c.rep_id,
+        itemType: c.item_type || 'hymn',
+        hymnId: c.hymn_id || undefined,
+        segName: c.seg_name || undefined,
+        segNote: c.seg_note || undefined,
+        annHeadline: c.ann_headline || undefined,
+        annBody: c.ann_body || undefined,
+        key: c.item_key || '',
+        repeatConfig: c.repeat_config || {},
+        order: typeof c.item_order === 'number' ? c.item_order : 0,
+        createdAt: c.created_at || Date.now(),
+        _updatedAt: cloudUpdated
+      };
+      if (!local) {
+        repItems.push(rebuilt);
+        changed = true;
+      } else if (cloudUpdated > localUpdated) {
+        Object.assign(local, rebuilt);
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function mergeFavs(cloudFavs){
+    var changed = false;
+    var localFavSet = new Set(hymns.filter(function(h){ return h.favourite; }).map(function(h){ return h.id; }));
+    var cloudActiveFavs = new Set();
+    var cloudDeletedFavs = new Set();
+    cloudFavs.forEach(function(c){
+      if (c.deleted_at) cloudDeletedFavs.add(c.hymn_id);
+      else cloudActiveFavs.add(c.hymn_id);
+    });
+    // Apply cloud activations
+    hymns.forEach(function(h){
+      var wasFav = h.favourite;
+      var shouldBeFav = cloudActiveFavs.has(h.id) || (localFavSet.has(h.id) && !cloudDeletedFavs.has(h.id));
+      if (wasFav !== shouldBeFav) {
+        h.favourite = shouldBeFav;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function mergeHistory(cloudHistory){
+    var changed = false;
+    var localById = {};
+    (serviceHistory || []).forEach(function(h){ if (h.id) localById[h.id] = h; });
+    cloudHistory.forEach(function(c){
+      if (c.deleted_at) return;
+      if (!localById[c.id]) {
+        if (!serviceHistory) serviceHistory = [];
+        serviceHistory.unshift({
+          id: c.id,
+          hymnId: c.hymn_id,
+          title: c.hymn_title,
+          book: c.hymn_book,
+          number: c.hymn_number,
+          playedAt: c.played_at,
+          context: c.context
+        });
+        changed = true;
+      }
+    });
+    if (changed && serviceHistory) {
+      serviceHistory.sort(function(a, b){ return (b.playedAt || 0) - (a.playedAt || 0); });
+      serviceHistory = serviceHistory.slice(0, 200);
+    }
+    return changed;
+  }
+
+  // ── PENDING DELETIONS — track soft deletes between push cycles ───────────
+  // When the user deletes a repertoire / item / favourite locally, we capture
+  // the ID here so the next push can mark it deleted on the server. Without
+  // this, the item just disappears locally and the cloud copy lingers.
+  function _getDelStore(){
+    try { return JSON.parse(localStorage.getItem('lh_cloud_pending_dels') || '{"reps":[],"items":[],"favs":[]}'); }
+    catch(e){ return { reps:[], items:[], favs:[] }; }
+  }
+  function _saveDelStore(s){
+    try { localStorage.setItem('lh_cloud_pending_dels', JSON.stringify(s)); } catch(e){}
+  }
+  function trackDeletedRep(rep){
+    var s = _getDelStore();
+    s.reps.push({ id: rep.id, name: rep.name, date: rep.date, createdAt: rep.createdAt, deletedAt: Date.now() });
+    _saveDelStore(s);
+  }
+  function trackDeletedItems(itemList){
+    var s = _getDelStore();
+    itemList.forEach(function(i){
+      s.items.push({ id: i.id, repId: i.repId, itemType: i.itemType, hymnId: i.hymnId, createdAt: i.createdAt, deletedAt: Date.now() });
+    });
+    _saveDelStore(s);
+  }
+  function trackDeletedFav(hymnId){
+    var s = _getDelStore();
+    if (s.favs.indexOf(hymnId) === -1) s.favs.push(hymnId);
+    _saveDelStore(s);
+  }
+  function _pendingDeletedReps(){ return _getDelStore().reps || []; }
+  function _pendingDeletedItems(){ return _getDelStore().items || []; }
+  function _pendingDeletedFavs(){ return _getDelStore().favs || []; }
+  function _clearPendingDeletedReps(){ var s = _getDelStore(); s.reps = []; _saveDelStore(s); }
+  function _clearPendingDeletedItems(){ var s = _getDelStore(); s.items = []; _saveDelStore(s); }
+  function _clearPendingDeletedFavs(){ var s = _getDelStore(); s.favs = []; _saveDelStore(s); }
+
+  // ── PUSH SCHEDULING — debounced, with retry-on-failure ───────────────────
+  function _schedulePush(kind, fn){
+    if (!isConfigured() || !getUserId()) return;
+    if (pushTimers[kind]) clearTimeout(pushTimers[kind]);
+    pushTimers[kind] = setTimeout(function(){
+      pushTimers[kind] = null;
+      fn().catch(function(err){
+        log('push ' + kind + ' failed', err && err.message);
+        // exponential backoff
+        var delay = retryDelays[kind] || RETRY_BASE_MS;
+        retryDelays[kind] = Math.min(delay * 2, RETRY_MAX_MS);
+        setTimeout(function(){ _schedulePush(kind, fn); }, delay);
+      });
+    }, PUSH_DEBOUNCE_MS);
+  }
+  function scheduleRepsPush(){       _schedulePush('reps',    pushRepertoires); }
+  function scheduleItemsPush(){      _schedulePush('items',   pushRepItems); }
+  function scheduleFavouritesPush(){ _schedulePush('favs',    pushFavourites); }
+  function scheduleHistoryPush(){    _schedulePush('history', pushServiceHistory); }
+
+  // ── FIRST-TIME MIGRATION — push all existing local data once ─────────────
+  // Runs the first time a user signs in after this version is deployed. It
+  // ensures users who already have repertoires don't lose them when sync starts.
+  function migrateIfNeeded(){
+    if (!isConfigured() || !getUserId()) return Promise.resolve();
+    var done = false;
+    try { done = localStorage.getItem(SYNC_FLAG_KEY + ':' + getUserId()) === '1'; } catch(e){}
+    if (done) return Promise.resolve();
+    log('first-time migration upload');
+    return Promise.all([
+      pushRepertoires(),
+      pushRepItems(),
+      pushFavourites(),
+      pushServiceHistory()
+    ]).then(function(){
+      try { localStorage.setItem(SYNC_FLAG_KEY + ':' + getUserId(), '1'); } catch(e){}
+      log('migration complete');
+    }).catch(function(err){
+      log('migration partial failure', err && err.message);
+      // Don't set the flag — we'll retry next session
+    });
+  }
+
+  // ── LIFECYCLE — sign-in / sign-out / init ────────────────────────────────
+  function onSignIn(){
+    if (!isConfigured()) return;
+    log('sign in detected — pull then migrate');
+    // Pull first to get latest server state, then upload anything local that's new
+    pullAll().then(function(){ return migrateIfNeeded(); }).then(startPullTimer);
+  }
+  function onSignOut(){
+    log('sign out — stopping sync');
+    stopPullTimer();
+    Object.keys(pushTimers).forEach(function(k){
+      if (pushTimers[k]) { clearTimeout(pushTimers[k]); pushTimers[k] = null; }
+    });
+  }
+  function startPullTimer(){
+    stopPullTimer();
+    pullTimer = setInterval(function(){
+      if (!navigator.onLine) return;
+      pullAll();
+    }, PULL_INTERVAL_MS);
+  }
+  function stopPullTimer(){
+    if (pullTimer) { clearInterval(pullTimer); pullTimer = null; }
+  }
+
+  // ── INIT — runs once on script load ──────────────────────────────────────
+  function init(){
+    enabled = !!(SUPABASE_URL && SUPABASE_URL.indexOf('http') === 0
+              && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 20
+              && SUPABASE_URL.indexOf('__SUPABASE_URL__') === -1);
+    if (!enabled) {
+      // Always log this — it's a setup issue users need to know about
+      try { console.warn('[CloudSync] DISABLED — Supabase URL or anon key not configured. Replace __SUPABASE_URL__ and __SUPABASE_ANON_KEY__ in index.html.'); } catch(e){}
+      return;
+    }
+    try { console.log('[CloudSync v2] enabled — Supabase URL configured, ready to sync'); } catch(e){}
+    // CloudSync.init() runs at script-define time (very early), but
+    // loadUserSession() — which restores currentUser from localStorage / cookie
+    // — runs much later in the bootstrap sequence. So at init time, getUserId()
+    // is almost always null even for a returning signed-in visitor.
+    //
+    // Solution: poll briefly for currentUser to appear, then fire onSignIn.
+    var waited = 0;
+    var POLL_MS = 1000;
+    var MAX_WAIT_MS = 20000;
+    var firedAlready = false;
+    var poll = setInterval(function(){
+      waited += POLL_MS;
+      var uid = getUserId();
+      // Heartbeat — visible in console so the admin can confirm the poll is running
+      try { console.log('[CloudSync] poll t=' + waited + 'ms, currentUser?', uid ? '(' + uid.substring(0, 8) + '...)' : 'null'); } catch(e){}
+      if (uid && !firedAlready) {
+        firedAlready = true;
+        clearInterval(poll);
+        try { console.log('[CloudSync] returning visitor detected, starting sync'); } catch(e){}
+        onSignIn();
+      } else if (waited >= MAX_WAIT_MS) {
+        clearInterval(poll);
+        try { console.log('[CloudSync] poll timed out — no signed-in user detected. doLogin/doRegister will trigger sync if user signs in.'); } catch(e){}
+      }
+    }, POLL_MS);
+  }
+
+  return {
+    init: init,
+    onSignIn: onSignIn,
+    onSignOut: onSignOut,
+    pullAll: pullAll,
+    scheduleRepsPush: scheduleRepsPush,
+    scheduleItemsPush: scheduleItemsPush,
+    scheduleFavouritesPush: scheduleFavouritesPush,
+    scheduleHistoryPush: scheduleHistoryPush,
+    trackDeletedRep: trackDeletedRep,
+    trackDeletedItems: trackDeletedItems,
+    trackDeletedFav: trackDeletedFav,
+    isConfigured: function(){ return isConfigured(); },
+    isEnabled: function(){ return enabled; },
+    // Manual diagnostic — run CloudSync.diag() in the browser console to see
+    // exactly what state sync is in. Useful for troubleshooting.
+    diag: function(){
+      var uid = getUserId();
+      var msg = '\n=== CloudSync Diagnostic ===' +
+        '\n  enabled:       ' + enabled +
+        '\n  configured:    ' + isConfigured() +
+        '\n  Supabase URL:  ' + (SUPABASE_URL.indexOf('__') === -1 ? 'set' : 'PLACEHOLDER NOT REPLACED') +
+        '\n  Anon key set:  ' + (SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 20 && SUPABASE_ANON_KEY.indexOf('__') === -1) +
+        '\n  currentUser:   ' + (uid ? uid : 'NOT SIGNED IN') +
+        '\n  pullTimer:     ' + (pullTimer ? 'running' : 'not running') +
+        '\n  lastPullAt:    ' + (lastPullAt ? new Date(lastPullAt).toISOString() : 'never') +
+        '\n  pendingDels:   ' + JSON.stringify(_getDelStore()) +
+        '\n';
+      try { console.log(msg); } catch(e){}
+      // Try a manual pull to surface any error
+      if (isConfigured() && uid) {
+        try { console.log('[CloudSync] running manual pull...'); } catch(e){}
+        return pullAll();
+      } else {
+        try { console.log('[CloudSync] cannot pull: not configured or not signed in'); } catch(e){}
+        return Promise.resolve();
+      }
+    }
+  };
+})();
+// Initialise on script load — sync starts as soon as a user signs in
+try { CloudSync.init(); } catch(e) { console.warn('CloudSync init failed', e); }
+
 
 function load(){
   // Hymns are not loaded from localStorage — they come from GitHub on every sync.
@@ -2501,7 +3110,10 @@ function renderHymnGrid(){
     e.stopPropagation();
     const h=hymns.find(x=>x.id===b.dataset.id);
     if(h){
+      var wasFav = h.favourite;
       h.favourite=!h.favourite;
+      // If we just removed it, track for cloud soft-delete
+      try { if (wasFav && !h.favourite && typeof CloudSync !== 'undefined') CloudSync.trackDeletedFav(h.id); } catch(e){}
       saveFavourites(); // lightweight — only saves favourite IDs
       renderHymnGrid();
       toast(h.favourite?'Added to favourites':'Removed from favourites','info');
@@ -3084,7 +3696,14 @@ function renderRepDetail(r){
  </div>
  </div>`;
   }).join('');
-  $i('rd-items').querySelectorAll('.rep-remove').forEach(b=>b.addEventListener('click',()=>{repItems=repItems.filter(i=>i.id!==b.dataset.id);save();renderRepDetail(r);toast('Removed','info');}));
+  $i('rd-items').querySelectorAll('.rep-remove').forEach(b=>b.addEventListener('click',()=>{
+    var doomed = repItems.filter(function(i){ return i.id === b.dataset.id; });
+    try { if (typeof CloudSync !== 'undefined' && doomed.length) CloudSync.trackDeletedItems(doomed); } catch(e){}
+    repItems=repItems.filter(i=>i.id!==b.dataset.id);
+    save();
+    renderRepDetail(r);
+    toast('Removed','info');
+  }));
   $i('rd-items').querySelectorAll('.key-select').forEach(s=>s.addEventListener('change',()=>{const item=repItems.find(i=>i.id===s.dataset.id);if(item){item.key=s.value;save();}}));
   $i('rd-items').querySelectorAll('.rep-cfg-btn[data-id]').forEach(b=>b.addEventListener('click',()=>openRepeatConfig(b.dataset.id)));
   $i('rd-items').querySelectorAll('[data-seg-edit]').forEach(b=>b.addEventListener('click',()=>{const item=repItems.find(i=>i.id===b.dataset.segEdit);if(item)openSegmentModal(item);}));
@@ -3224,6 +3843,14 @@ function startRepProjection(){
 }
 function deleteRep(){
   if(!repToDelete)return;
+  // Track deletions for cloud sync — server will mark these soft-deleted on next push
+  var doomedItems = repItems.filter(function(i){ return i.repId === repToDelete.id; });
+  try {
+    if (typeof CloudSync !== 'undefined') {
+      CloudSync.trackDeletedRep(repToDelete);
+      if (doomedItems.length) CloudSync.trackDeletedItems(doomedItems);
+    }
+  } catch(e){}
   repItems=repItems.filter(i=>i.repId!==repToDelete.id);repertoires=repertoires.filter(r=>r.id!==repToDelete.id);
   repToDelete=null;currentRep=null;save();closeModal('del-rep-modal');closeModal('rep-detail-modal');openModal('rep-list-modal');renderRepList();toast('Repertoire deleted','success');
 }
@@ -4402,6 +5029,7 @@ async function doLogin(){
       renderUserBtn();
       closeModal('auth-modal');
       recordUsageEvent('login');
+      try { if (typeof CloudSync !== 'undefined' && CloudSync.onSignIn) CloudSync.onSignIn(); } catch(e){}
       toast('Welcome back, '+(res.user.name.split(' ')[0])+'!','success');
     } else {
       showMsg('login-msg', res.message||'Sign in failed.');
@@ -4434,6 +5062,7 @@ async function doRegister(){
       saveUserSession(res.user);
       renderUserBtn();
       closeModal('auth-modal');
+      try { if (typeof CloudSync !== 'undefined' && CloudSync.onSignIn) CloudSync.onSignIn(); } catch(e){}
       toast('Welcome to HymnDesk, '+name+'!','success');
     } else {
       showMsg('reg-msg', res.message||'Registration failed.');
@@ -4447,6 +5076,7 @@ async function doRegister(){
 
 // ── LOGOUT ────────────────────────────────────────────────────────────────────
 function doLogout(){
+  try { if (typeof CloudSync !== 'undefined' && CloudSync.onSignOut) CloudSync.onSignOut(); } catch(e){}
   clearUserSession();
   renderUserBtn();
   closeModal('auth-modal');
