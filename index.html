@@ -1983,7 +1983,7 @@ function saveFavourites(){
 var CloudSync = (function(){
   // ── CONFIGURATION ────────────────────────────────────────────────────────
   var SUPABASE_URL      = 'https://qszwtpoqvnjstsbihrkv.supabase.co/rest/v1/';
-  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzend0cG9xdm5qc3RzYmlocmt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzOTc0ODMsImV4cCI6MjA5Mzk3MzQ4M30.NIbsrmfkxQwE5kB99LJjKaegQwSFw_nDTLZz5J07b1E';
+  var SUPABASE_ANON_KEY = 'sb_publishable_bVsE-Yv3f7fh873eTAxm2Q_tMU0-aJg';
   var PUSH_DEBOUNCE_MS  = 1500;     // batch rapid edits before sending
   var PULL_INTERVAL_MS  = 5 * 60 * 1000; // background pull every 5 min
   var RETRY_BASE_MS     = 2000;     // exponential backoff start
@@ -2001,7 +2001,25 @@ var CloudSync = (function(){
   function log(){ try { if (window.__SYNC_DEBUG) console.log.apply(console, ['[CloudSync]'].concat([].slice.call(arguments))); } catch(e){} }
 
   function getUserId(){
-    return (typeof currentUser !== 'undefined' && currentUser && currentUser.id) ? currentUser.id : null;
+    if (typeof currentUser === 'undefined' || !currentUser) return null;
+    // Prefer the GAS-issued user ID when available
+    if (currentUser.id) return String(currentUser.id);
+    // Fallback: some accounts may have been created without an explicit ID
+    // (older GAS responses, missing field, etc.). Derive a stable identifier
+    // from email so sync still works for those users. Email is the only
+    // consistently-present field across all auth flows.
+    if (currentUser.email) {
+      var derived = 'email:' + String(currentUser.email).toLowerCase().trim();
+      // Cache it back onto currentUser so subsequent calls are stable
+      // (and so pushed records all use the same user_id).
+      currentUser.id = derived;
+      try {
+        if (typeof saveUserSession === 'function') saveUserSession(currentUser);
+        try { console.warn('[CloudSync] currentUser had no id field — using derived id: ' + derived); } catch(e){}
+      } catch(e){}
+      return derived;
+    }
+    return null;
   }
 
   function isConfigured(){
@@ -2027,12 +2045,7 @@ var CloudSync = (function(){
   function rpc(method, path, body, extraHeaders){
     if (!isConfigured()) return Promise.reject(new Error('not_configured'));
     if (!getUserId()) return Promise.reject(new Error('not_signed_in'));
-    // Normalise the base URL: strip trailing slash AND any trailing /rest/v1
-    // so users can paste either 'https://x.supabase.co' or
-    // 'https://x.supabase.co/rest/v1/' into the config without breaking the
-    // request URL via path doubling.
-    var base = SUPABASE_URL.replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
-    var url  = base + '/rest/v1/' + path;
+    var url = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/' + path;
     var opts = {
       method: method,
       headers: Object.assign({}, headers(), extraHeaders || {})
@@ -2043,7 +2056,6 @@ var CloudSync = (function(){
         return res.text().then(function(t){
           var err = new Error('HTTP ' + res.status + ': ' + (t || ''));
           err.status = res.status;
-          err.url = url;
           throw err;
         });
       }
@@ -2052,8 +2064,9 @@ var CloudSync = (function(){
   }
 
   // ── REPERTOIRE PUSH ──────────────────────────────────────────────────────
-  // Upserts the local repertoires table to Supabase. We send everything the
-  // user owns — trivial size — and let the server merge by primary key.
+  // Pushes local repertoires to Supabase. Skips IDs we've recorded as
+  // tombstones (records confirmed deleted on the server) — this is what
+  // prevents the classic delete-on-A-resurrects-from-B bug.
   function pushRepertoires(){
     var uid = getUserId();
     if (!uid) return Promise.resolve();
@@ -2061,29 +2074,32 @@ var CloudSync = (function(){
       return Promise.resolve();
     }
     var now = Date.now();
-    var rows = repertoires.map(function(r){
-      return {
-        id: r.id,
-        user_id: uid,
-        name: r.name || '',
-        rep_date: r.date || null,
-        created_at: r.createdAt || now,
-        updated_at: r._updatedAt || now,
-        deleted_at: r.deletedAt || null,
-        payload: r._payload || null
-      };
-    }).concat(_pendingDeletedReps().map(function(r){
-      return {
-        id: r.id,
-        user_id: uid,
-        name: r.name || '',
-        rep_date: r.date || null,
-        created_at: r.createdAt || now,
-        updated_at: now,
-        deleted_at: r.deletedAt || now,
-        payload: null
-      };
-    }));
+    var rows = repertoires
+      .filter(function(r){ return !_hasTombstone('reps', r.id); })
+      .map(function(r){
+        return {
+          id: r.id,
+          user_id: uid,
+          name: r.name || '',
+          rep_date: r.date || null,
+          created_at: r.createdAt || now,
+          updated_at: r._updatedAt || now,
+          deleted_at: r.deletedAt || null,
+          payload: r._payload || null
+        };
+      })
+      .concat(_pendingDeletedReps().map(function(r){
+        return {
+          id: r.id,
+          user_id: uid,
+          name: r.name || '',
+          rep_date: r.date || null,
+          created_at: r.createdAt || now,
+          updated_at: now,
+          deleted_at: r.deletedAt || now,
+          payload: null
+        };
+      }));
     if (!rows.length) return Promise.resolve();
     return rpc('POST', 'user_repertoires', rows, {
       'Prefer': 'resolution=merge-duplicates,return=minimal'
@@ -2099,45 +2115,55 @@ var CloudSync = (function(){
     var uid = getUserId();
     if (!uid) return Promise.resolve();
     var now = Date.now();
-    var rows = (repItems || []).map(function(i){
-      return {
-        id: i.id,
-        user_id: uid,
-        rep_id: i.repId,
-        item_type: i.itemType || 'hymn',
-        hymn_id: i.hymnId || null,
-        seg_name: i.segName || null,
-        seg_note: i.segNote || null,
-        ann_headline: i.annHeadline || null,
-        ann_body: i.annBody || null,
-        item_key: i.key || null,
-        repeat_config: i.repeatConfig || null,
-        item_order: typeof i.order === 'number' ? i.order : 0,
-        created_at: i.createdAt || now,
-        updated_at: i._updatedAt || now,
-        deleted_at: i.deletedAt || null,
-        payload: i._payload || null
-      };
-    }).concat(_pendingDeletedItems().map(function(i){
-      return {
-        id: i.id,
-        user_id: uid,
-        rep_id: i.repId || '',
-        item_type: i.itemType || 'hymn',
-        hymn_id: i.hymnId || null,
-        seg_name: i.segName || null,
-        seg_note: i.segNote || null,
-        ann_headline: i.annHeadline || null,
-        ann_body: i.annBody || null,
-        item_key: null,
-        repeat_config: null,
-        item_order: 0,
-        created_at: i.createdAt || now,
-        updated_at: now,
-        deleted_at: i.deletedAt || now,
-        payload: null
-      };
-    }));
+    var rows = (repItems || [])
+      .filter(function(i){
+        // Skip tombstoned items, AND items whose parent rep is tombstoned.
+        // Without the second check, an item created locally for a rep that
+        // was deleted on another device would be re-pushed and resurrect
+        // an orphaned item on the server.
+        if (_hasTombstone('items', i.id)) return false;
+        if (i.repId && _hasTombstone('reps', i.repId)) return false;
+        return true;
+      })
+      .map(function(i){
+        return {
+          id: i.id,
+          user_id: uid,
+          rep_id: i.repId,
+          item_type: i.itemType || 'hymn',
+          hymn_id: i.hymnId || null,
+          seg_name: i.segName || null,
+          seg_note: i.segNote || null,
+          ann_headline: i.annHeadline || null,
+          ann_body: i.annBody || null,
+          item_key: i.key || null,
+          repeat_config: i.repeatConfig || null,
+          item_order: typeof i.order === 'number' ? i.order : 0,
+          created_at: i.createdAt || now,
+          updated_at: i._updatedAt || now,
+          deleted_at: i.deletedAt || null,
+          payload: i._payload || null
+        };
+      }).concat(_pendingDeletedItems().map(function(i){
+        return {
+          id: i.id,
+          user_id: uid,
+          rep_id: i.repId || '',
+          item_type: i.itemType || 'hymn',
+          hymn_id: i.hymnId || null,
+          seg_name: i.segName || null,
+          seg_note: i.segNote || null,
+          ann_headline: i.annHeadline || null,
+          ann_body: i.annBody || null,
+          item_key: null,
+          repeat_config: null,
+          item_order: 0,
+          created_at: i.createdAt || now,
+          updated_at: now,
+          deleted_at: i.deletedAt || now,
+          payload: null
+        };
+      }));
     if (!rows.length) return Promise.resolve();
     return rpc('POST', 'user_repertoire_items', rows, {
       'Prefer': 'resolution=merge-duplicates,return=minimal'
@@ -2153,7 +2179,9 @@ var CloudSync = (function(){
     var uid = getUserId();
     if (!uid) return Promise.resolve();
     var now = Date.now();
-    var favIds = hymns.filter(function(h){ return h.favourite; }).map(function(h){ return h.id; });
+    var favIds = hymns
+      .filter(function(h){ return h.favourite && !_hasTombstone('favs', h.id); })
+      .map(function(h){ return h.id; });
     var rows = favIds.map(function(hid){
       return {
         user_id: uid,
@@ -2263,13 +2291,18 @@ var CloudSync = (function(){
       var cloudUpdated = c.updated_at || 0;
       var localUpdated = (local && local._updatedAt) || (local && local.createdAt) || 0;
       if (c.deleted_at) {
-        // Server says deleted — remove locally (or mark deleted)
-        if (local && !local.deletedAt) {
+        // Server says deleted — record a tombstone so this device's future
+        // pushes won't resurrect it, then remove from local state if present.
+        _addTombstone('reps', c.id);
+        if (local) {
           repertoires = repertoires.filter(function(r){ return r.id !== c.id; });
           changed = true;
         }
         return;
       }
+      // Skip records we know are tombstoned locally — protects against a
+      // race where server hasn't yet processed our deletion.
+      if (_hasTombstone('reps', c.id)) return;
       if (!local) {
         repertoires.push({
           id: c.id,
@@ -2298,12 +2331,16 @@ var CloudSync = (function(){
       var cloudUpdated = c.updated_at || 0;
       var localUpdated = (local && local._updatedAt) || (local && local.createdAt) || 0;
       if (c.deleted_at) {
+        _addTombstone('items', c.id);
         if (local) {
           repItems = repItems.filter(function(i){ return i.id !== c.id; });
           changed = true;
         }
         return;
       }
+      // Skip if locally tombstoned, or if the parent rep is tombstoned
+      if (_hasTombstone('items', c.id)) return;
+      if (c.rep_id && _hasTombstone('reps', c.rep_id)) return;
       var rebuilt = {
         id: c.id,
         repId: c.rep_id,
@@ -2336,13 +2373,21 @@ var CloudSync = (function(){
     var cloudActiveFavs = new Set();
     var cloudDeletedFavs = new Set();
     cloudFavs.forEach(function(c){
-      if (c.deleted_at) cloudDeletedFavs.add(c.hymn_id);
-      else cloudActiveFavs.add(c.hymn_id);
+      if (c.deleted_at) {
+        cloudDeletedFavs.add(c.hymn_id);
+        _addTombstone('favs', c.hymn_id);
+      } else {
+        cloudActiveFavs.add(c.hymn_id);
+      }
     });
     // Apply cloud activations
     hymns.forEach(function(h){
       var wasFav = h.favourite;
-      var shouldBeFav = cloudActiveFavs.has(h.id) || (localFavSet.has(h.id) && !cloudDeletedFavs.has(h.id));
+      // A hymn is a favourite if cloud says so, OR if it's locally favourited
+      // AND cloud hasn't explicitly deleted it AND it's not tombstoned.
+      var locallyTombstoned = _hasTombstone('favs', h.id);
+      var shouldBeFav = (cloudActiveFavs.has(h.id) && !locallyTombstoned)
+        || (localFavSet.has(h.id) && !cloudDeletedFavs.has(h.id) && !locallyTombstoned);
       if (wasFav !== shouldBeFav) {
         h.favourite = shouldBeFav;
         changed = true;
@@ -2393,11 +2438,16 @@ var CloudSync = (function(){
     var s = _getDelStore();
     s.reps.push({ id: rep.id, name: rep.name, date: rep.date, createdAt: rep.createdAt, deletedAt: Date.now() });
     _saveDelStore(s);
+    // Also add to tombstones immediately — protects against a stale push that
+    // would otherwise resurrect the record before this device's deletion push
+    // reaches the server.
+    _addTombstone('reps', rep.id);
   }
   function trackDeletedItems(itemList){
     var s = _getDelStore();
     itemList.forEach(function(i){
       s.items.push({ id: i.id, repId: i.repId, itemType: i.itemType, hymnId: i.hymnId, createdAt: i.createdAt, deletedAt: Date.now() });
+      _addTombstone('items', i.id);
     });
     _saveDelStore(s);
   }
@@ -2405,6 +2455,7 @@ var CloudSync = (function(){
     var s = _getDelStore();
     if (s.favs.indexOf(hymnId) === -1) s.favs.push(hymnId);
     _saveDelStore(s);
+    _addTombstone('favs', hymnId);
   }
   function _pendingDeletedReps(){ return _getDelStore().reps || []; }
   function _pendingDeletedItems(){ return _getDelStore().items || []; }
@@ -2412,6 +2463,58 @@ var CloudSync = (function(){
   function _clearPendingDeletedReps(){ var s = _getDelStore(); s.reps = []; _saveDelStore(s); }
   function _clearPendingDeletedItems(){ var s = _getDelStore(); s.items = []; _saveDelStore(s); }
   function _clearPendingDeletedFavs(){ var s = _getDelStore(); s.favs = []; _saveDelStore(s); }
+
+  // ── TOMBSTONES — IDs confirmed deleted on the server ─────────────────────
+  // When we pull from the server and see a record with deleted_at set, we
+  // record the ID here. Push functions check this list before sending data
+  // and skip any record whose ID is a tombstone. This prevents the classic
+  // distributed-sync bug where Device A deletes a record and Device B's next
+  // push (still holding a stale copy) re-creates it on the server.
+  //
+  // Tombstones are pruned after 30 days — the soft-delete window.
+  var TOMBSTONE_KEY = 'lh_cloud_tombstones';
+  var TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  function _getTombstones(){
+    try {
+      var raw = localStorage.getItem(TOMBSTONE_KEY);
+      if (!raw) return { reps:{}, items:{}, favs:{} };
+      var parsed = JSON.parse(raw);
+      // Migrate older shapes / ensure all buckets exist
+      parsed.reps = parsed.reps || {};
+      parsed.items = parsed.items || {};
+      parsed.favs = parsed.favs || {};
+      return parsed;
+    } catch(e){ return { reps:{}, items:{}, favs:{} }; }
+  }
+  function _saveTombstones(t){
+    try { localStorage.setItem(TOMBSTONE_KEY, JSON.stringify(t)); } catch(e){}
+  }
+  function _addTombstone(bucket, id){
+    if (!id) return;
+    var t = _getTombstones();
+    t[bucket] = t[bucket] || {};
+    t[bucket][id] = Date.now();
+    _saveTombstones(t);
+  }
+  function _hasTombstone(bucket, id){
+    if (!id) return false;
+    var t = _getTombstones();
+    return !!(t[bucket] && t[bucket][id]);
+  }
+  function _pruneTombstones(){
+    var t = _getTombstones();
+    var now = Date.now();
+    var changed = false;
+    ['reps','items','favs'].forEach(function(b){
+      Object.keys(t[b] || {}).forEach(function(id){
+        if (now - t[b][id] > TOMBSTONE_TTL_MS) {
+          delete t[b][id];
+          changed = true;
+        }
+      });
+    });
+    if (changed) _saveTombstones(t);
+  }
 
   // ── PUSH SCHEDULING — debounced, with retry-on-failure ───────────────────
   function _schedulePush(kind, fn){
@@ -2537,6 +2640,12 @@ var CloudSync = (function(){
     // exactly what state sync is in. Useful for troubleshooting.
     diag: function(){
       var uid = getUserId();
+      var t = _getTombstones();
+      var tombstoneCounts = {
+        reps: Object.keys(t.reps || {}).length,
+        items: Object.keys(t.items || {}).length,
+        favs: Object.keys(t.favs || {}).length
+      };
       var msg = '\n=== CloudSync Diagnostic ===' +
         '\n  enabled:       ' + enabled +
         '\n  configured:    ' + isConfigured() +
@@ -2546,6 +2655,7 @@ var CloudSync = (function(){
         '\n  pullTimer:     ' + (pullTimer ? 'running' : 'not running') +
         '\n  lastPullAt:    ' + (lastPullAt ? new Date(lastPullAt).toISOString() : 'never') +
         '\n  pendingDels:   ' + JSON.stringify(_getDelStore()) +
+        '\n  tombstones:    ' + JSON.stringify(tombstoneCounts) +
         '\n';
       try { console.log(msg); } catch(e){}
       // Try a manual pull to surface any error
@@ -2556,6 +2666,12 @@ var CloudSync = (function(){
         try { console.log('[CloudSync] cannot pull: not configured or not signed in'); } catch(e){}
         return Promise.resolve();
       }
+    },
+    // Emergency reset — clears all tombstones (use only if a deletion gets
+    // wedged or if you need to force a re-sync of everything).
+    clearTombstones: function(){
+      try { localStorage.removeItem(TOMBSTONE_KEY); } catch(e){}
+      try { console.log('[CloudSync] all tombstones cleared'); } catch(e){}
     }
   };
 })();
