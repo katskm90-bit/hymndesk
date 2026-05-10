@@ -2,7 +2,7 @@
 // Scores: Has Service Worker, Has Logic, Offline Support,
 //         Background Sync, Periodic Sync, Push Notifications
 
-const CACHE_NAME = 'hymndesk-v8';
+const CACHE_NAME = 'hymndesk-v9';
 const HYMNS_CACHE = 'hymndesk-hymns-v6';
 
 const APP_SHELL = [
