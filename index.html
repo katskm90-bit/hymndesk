@@ -1532,6 +1532,15 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
         <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
         Edit My Details
       </button>
+
+      <!-- Sync Info — shows what user ID this device is using, so cross-device
+           sync issues can be diagnosed without needing the browser console. -->
+      <details style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:12px">
+        <summary style="cursor:pointer;color:var(--text2);font-weight:600;user-select:none">Sync status (tap to view)</summary>
+        <div id="account-sync-info" style="font-family:monospace;font-size:11px;line-height:1.7;color:var(--text);margin-top:10px;white-space:pre-wrap;word-break:break-all">Loading...</div>
+        <button class="btn btn-ghost" id="account-sync-refresh-btn" style="width:100%;justify-content:center;margin-top:8px;font-size:11px;padding:6px">Refresh</button>
+      </details>
+
       <button class="auth-btn" id="do-logout-btn" style="background:linear-gradient(135deg,#475569,#334155)">Sign Out</button>
     </div>
   </div>
@@ -4987,12 +4996,45 @@ function openAuthModal(){
     if(currentUser.conference) pd.push(currentUser.conference);
     if(currentUser.country)    pd.push(currentUser.country);
     document.getElementById('profile-detail').textContent = pd.join(' · ');
+    // Populate the sync diagnostic panel — this lets users see, on any device,
+    // exactly what user ID is being used for cross-device sync. Critical for
+    // verifying that two devices are actually identifying as the same account.
+    _renderAccountSyncInfo();
   } else {
     loggedOut.style.display = 'block';
     loggedIn.style.display  = 'none';
     switchAuthTab('login');
   }
   openModal('auth-modal');
+}
+
+// Renders the sync diagnostic inside the My Account modal. Plain text, no
+// console required — anyone can tap, read, screenshot, and share.
+function _renderAccountSyncInfo(){
+  var el = document.getElementById('account-sync-info');
+  if (!el) return;
+  try {
+    var uid    = (currentUser && currentUser.id)    ? currentUser.id    : '(none)';
+    var email  = (currentUser && currentUser.email) ? currentUser.email : '(none)';
+    var name   = (currentUser && currentUser.name)  ? currentUser.name  : '(none)';
+    var enabled    = (typeof CloudSync !== 'undefined') ? CloudSync.isEnabled()    : false;
+    var configured = (typeof CloudSync !== 'undefined') ? CloudSync.isConfigured() : false;
+    var localReps  = (typeof repertoires !== 'undefined' && repertoires) ? repertoires.length : 0;
+    var localItems = (typeof repItems !== 'undefined' && repItems) ? repItems.length : 0;
+    var localFavs  = (typeof hymns !== 'undefined' && hymns) ? hymns.filter(function(h){return h.favourite;}).length : 0;
+    var msg = 'Name:      ' + name + '\n'
+            + 'Email:     ' + email + '\n'
+            + 'User ID:   ' + uid + '\n\n'
+            + 'Sync enabled:    ' + (enabled ? 'yes' : 'no') + '\n'
+            + 'Sync configured: ' + (configured ? 'yes' : 'no') + '\n\n'
+            + 'On this device:\n'
+            + '  Repertoires: ' + localReps + '\n'
+            + '  Items:       ' + localItems + '\n'
+            + '  Favourites:  ' + localFavs;
+    el.textContent = msg;
+  } catch(e){
+    el.textContent = 'Unable to read sync state: ' + (e && e.message ? e.message : e);
+  }
 }
 
 function clearAuthMsgs(){
@@ -8486,6 +8528,11 @@ renderHeaderYtLink();
 
   // Feedback floating button
   bind('feedback-fab', 'click', function(){ openModal('user-feedback-modal'); });
+
+  // Sync info refresh button inside My Account modal
+  bind('account-sync-refresh-btn', 'click', function(){
+    if (typeof _renderAccountSyncInfo === 'function') _renderAccountSyncInfo();
+  });
 
   // Inbox tabs (data-inbox-tab attribute carries the target tab id)
   Array.prototype.forEach.call(document.querySelectorAll('[data-inbox-tab]'), function(el){
