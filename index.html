@@ -1533,18 +1533,6 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
         Edit My Details
       </button>
 
-      <!-- Sync Info — shows what user ID this device is using, so cross-device
-           sync issues can be diagnosed without needing the browser console. -->
-      <details style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:12px">
-        <summary style="cursor:pointer;color:var(--text2);font-weight:600;user-select:none">Sync status (tap to view)</summary>
-        <div id="account-sync-info" style="font-family:monospace;font-size:11px;line-height:1.7;color:var(--text);margin-top:10px;white-space:pre-wrap;word-break:break-all">Loading...</div>
-        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost" id="account-sync-refresh-btn" style="flex:1;justify-content:center;font-size:11px;padding:6px">Refresh</button>
-          <button class="btn btn-ghost" id="account-sync-restore-btn" style="flex:1;justify-content:center;font-size:11px;padding:6px;color:#E8650A;border-color:#E8650A">Restore from cloud</button>
-        </div>
-        <button class="btn btn-ghost" id="account-force-update-btn" style="width:100%;justify-content:center;font-size:11px;padding:6px;margin-top:6px;color:#475569;border-color:#cbd5e1">Force app update (if stuck)</button>
-      </details>
-
       <button class="auth-btn" id="do-logout-btn" style="background:linear-gradient(135deg,#475569,#334155)">Sign Out</button>
     </div>
   </div>
@@ -5166,76 +5154,12 @@ function openAuthModal(){
     if(currentUser.conference) pd.push(currentUser.conference);
     if(currentUser.country)    pd.push(currentUser.country);
     document.getElementById('profile-detail').textContent = pd.join(' · ');
-    // Populate the sync diagnostic panel — this lets users see, on any device,
-    // exactly what user ID is being used for cross-device sync. Critical for
-    // verifying that two devices are actually identifying as the same account.
-    _renderAccountSyncInfo();
   } else {
     loggedOut.style.display = 'block';
     loggedIn.style.display  = 'none';
     switchAuthTab('login');
   }
   openModal('auth-modal');
-}
-
-// Renders the sync diagnostic inside the My Account modal. Plain text, no
-// console required — anyone can tap, read, screenshot, and share.
-function _renderAccountSyncInfo(){
-  var el = document.getElementById('account-sync-info');
-  if (!el) return;
-  try {
-    var uid    = (currentUser && currentUser.id)    ? currentUser.id    : '(none)';
-    var email  = (currentUser && currentUser.email) ? currentUser.email : '(none)';
-    var name   = (currentUser && currentUser.name)  ? currentUser.name  : '(none)';
-    var enabled    = (typeof CloudSync !== 'undefined') ? CloudSync.isEnabled()    : false;
-    var configured = (typeof CloudSync !== 'undefined') ? CloudSync.isConfigured() : false;
-    var localReps  = (typeof repertoires !== 'undefined' && repertoires) ? repertoires.length : 0;
-    var localItems = (typeof repItems !== 'undefined' && repItems) ? repItems.length : 0;
-    var localFavs  = (typeof hymns !== 'undefined' && hymns) ? hymns.filter(function(h){return h.favourite;}).length : 0;
-    var msg = 'Name:      ' + name + '\n'
-            + 'Email:     ' + email + '\n'
-            + 'User ID:   ' + uid + '\n\n'
-            + 'Sync enabled:    ' + (enabled ? 'yes' : 'no') + '\n'
-            + 'Sync configured: ' + (configured ? 'yes' : 'no') + '\n\n'
-            + 'On this device:\n'
-            + '  Repertoires: ' + localReps + '\n'
-            + '  Items:       ' + localItems + '\n'
-            + '  Favourites:  ' + localFavs + '\n\n'
-            + 'In the cloud (Supabase): checking...';
-    el.textContent = msg;
-    // Asynchronously fetch the cloud counts so we can compare local vs server.
-    // This is the critical diagnostic — if cloud has data but local doesn't,
-    // it means pull is failing; if cloud is empty, push is failing.
-    if (enabled && configured && uid && typeof CloudSync.fetchCloudCounts === 'function') {
-      CloudSync.fetchCloudCounts().then(function(counts){
-        if (!counts) return;
-        var updated = 'Name:      ' + name + '\n'
-                    + 'Email:     ' + email + '\n'
-                    + 'User ID:   ' + uid + '\n\n'
-                    + 'Sync enabled:    ' + (enabled ? 'yes' : 'no') + '\n'
-                    + 'Sync configured: ' + (configured ? 'yes' : 'no') + '\n\n'
-                    + 'On this device:\n'
-                    + '  Repertoires: ' + localReps + '\n'
-                    + '  Items:       ' + localItems + '\n'
-                    + '  Favourites:  ' + localFavs + '\n\n'
-                    + 'In the cloud (Supabase):\n'
-                    + '  Repertoires: ' + counts.reps + '\n'
-                    + '  Items:       ' + counts.items + '\n'
-                    + '  Favourites:  ' + counts.favs + '\n'
-                    + '  History:     ' + counts.history + '\n\n'
-                    + 'Last pull:  ' + counts.lastPull + '\n'
-                    + 'Last push:  ' + counts.lastPush;
-        el.textContent = updated;
-      }).catch(function(err){
-        el.textContent = el.textContent.replace(
-          'In the cloud (Supabase): checking...',
-          'In the cloud (Supabase): error — ' + (err && err.message ? err.message : 'unknown')
-        );
-      });
-    }
-  } catch(e){
-    el.textContent = 'Unable to read sync state: ' + (e && e.message ? e.message : e);
-  }
 }
 
 function clearAuthMsgs(){
@@ -8730,92 +8654,6 @@ renderHeaderYtLink();
   // Feedback floating button
   bind('feedback-fab', 'click', function(){ openModal('user-feedback-modal'); });
 
-  // Sync info refresh button inside My Account modal
-  bind('account-sync-refresh-btn', 'click', function(){
-    if (typeof _renderAccountSyncInfo === 'function') _renderAccountSyncInfo();
-  });
-
-  // "Restore from cloud" — wipes local data and re-pulls from server. The
-  // user is asked to confirm because this is destructive of any unsaved local
-  // changes (though everything should already be in the cloud anyway).
-  bind('account-sync-restore-btn', 'click', function(){
-    if (typeof CloudSync === 'undefined' || !CloudSync.forceRestoreFromCloud) {
-      alert('Sync not available right now.');
-      return;
-    }
-    var ok = confirm('This will replace all repertoires, items, favourites and history on this device with what is in the cloud.\n\nUse this only if this device is showing different data from your other devices.\n\nProceed?');
-    if (!ok) return;
-    var el = document.getElementById('account-sync-info');
-    if (el) el.textContent = 'Restoring from cloud...\n\nPlease wait.';
-    CloudSync.forceRestoreFromCloud().then(function(res){
-      if (!res || !res.ok) {
-        var failMsg = 'Restore failed: ' + (res && res.error ? res.error : 'unknown error');
-        if (res && res.trace) failMsg += '\n\nTrace:\n' + res.trace.join('\n');
-        if (el) el.textContent = failMsg;
-        return;
-      }
-      // Show a clear report with both the cloud counts AND what actually ended
-      // up in local arrays. If those don't match, we have a bug to find.
-      if (el) {
-        var msg = 'Restore complete.\n\n'
-          + 'Pulled from cloud:\n'
-          + '  Repertoires: ' + res.restored.reps + '\n'
-          + '  Items:       ' + res.restored.items + '\n'
-          + '  Favourites:  ' + res.restored.favs + '\n'
-          + '  History:     ' + res.restored.history + '\n\n'
-          + 'Local state right after write:\n'
-          + '  Repertoires: ' + res.localAfter.reps + '\n'
-          + '  Items:       ' + res.localAfter.items + '\n'
-          + '  Favourites:  ' + res.localAfter.favs + '\n'
-          + '  History:     ' + res.localAfter.history;
-        if (res.trace && res.trace.length) {
-          msg += '\n\nTrace:\n' + res.trace.join('\n');
-        }
-        el.textContent = msg;
-      }
-      // Note: we do NOT auto-refresh _renderAccountSyncInfo here. Leaving the
-      // restore report visible so the user can see and screenshot exactly what
-      // happened. They can tap Refresh themselves when ready.
-    });
-  });
-
-  // "Force app update" — for users stuck on an old cached version (typically
-  // PWA users who installed weeks ago and haven't picked up updates). This
-  // unregisters all service workers, deletes all caches, and reloads. The
-  // next page load will fetch fresh code from the server.
-  bind('account-force-update-btn', 'click', function(){
-    var ok = confirm('This will check for and apply any app updates. You may briefly see a loading screen. Continue?');
-    if (!ok) return;
-    var el = document.getElementById('account-sync-info');
-    if (el) el.textContent = 'Forcing update...\n\nPlease wait, then the app will reload.';
-    Promise.resolve()
-      .then(function(){
-        // Step 1 — unregister all service workers
-        if (!('serviceWorker' in navigator)) return;
-        return navigator.serviceWorker.getRegistrations().then(function(regs){
-          return Promise.all(regs.map(function(r){ return r.unregister(); }));
-        });
-      })
-      .then(function(){
-        // Step 2 — delete all cache storage entries
-        if (!('caches' in window)) return;
-        return caches.keys().then(function(keys){
-          return Promise.all(keys.map(function(k){ return caches.delete(k); }));
-        });
-      })
-      .then(function(){
-        // Step 3 — hard reload, bypassing the HTTP cache
-        if (el) el.textContent = 'Update applied. Reloading...';
-        setTimeout(function(){
-          // Add a cache-busting query string so even the HTML fetch is fresh
-          window.location.href = window.location.pathname + '?u=' + Date.now();
-        }, 600);
-      })
-      .catch(function(err){
-        if (el) el.textContent = 'Update failed: ' + (err && err.message ? err.message : 'unknown error') + '\n\nTry again, or clear the browser cache manually.';
-      });
-  });
-
   // Inbox tabs (data-inbox-tab attribute carries the target tab id)
   Array.prototype.forEach.call(document.querySelectorAll('[data-inbox-tab]'), function(el){
     el.addEventListener('click', function(){ switchInboxTab(el.getAttribute('data-inbox-tab')); });
@@ -9078,23 +8916,40 @@ window.toast               = toast;
 </body>
 </html>
 <script>
-  // Register HymnDesk service worker with aggressive update handling.
+  // ════════════════════════════════════════════════════════════════════════
+  // Silent automatic app updates
+  // ════════════════════════════════════════════════════════════════════════
+  // Goals:
+  //   1. New code reaches every device (browser AND installed PWA) within
+  //      30 minutes of deployment, automatically. No banners, no buttons,
+  //      no user awareness — the app just keeps working with the latest code.
+  //   2. PWAs that have been stuck on old code for weeks update on the next
+  //      page open without any user action.
   //
-  // Why this is more complex than a simple register() call:
-  //   Service workers cache themselves by default. A PWA installed weeks ago
-  //   may keep serving an outdated SW (and therefore stale app code) until the
-  //   browser happens to check for updates — sometimes days later. For sync
-  //   features that must stay in step across devices, that's unacceptable.
+  // How it works:
+  //   - updateViaCache:'none' — the SW file itself is never cached by the
+  //     browser. Every navigation triggers a network fetch of sw.js.
+  //   - skipWaiting() in the SW activates the new SW immediately on install,
+  //     replacing the old one. No "waiting" state.
+  //   - clients.claim() makes the new SW take control of any open pages.
+  //   - We listen for 'controllerchange' and reload the page automatically
+  //     when a new SW takes over. This is invisible to users on a normal
+  //     reload, and looks like a quick refresh in long-running sessions.
+  //   - Every 15 minutes, we trigger an explicit update check. Catches users
+  //     who keep the PWA open for hours.
+  //   - On every page navigation / app focus, the browser also re-checks the
+  //     SW automatically. PWAs that have been closed for a while pick up the
+  //     new code as soon as the user reopens them.
   //
-  // Three things make this robust:
-  //   1. updateViaCache:'none' — the SW itself is never cached. Every page
-  //      load checks the network for an updated sw.js.
-  //   2. updatefound listener — when a new SW is detected, we offer the user
-  //      an immediate "Update now" banner. They don't have to know what a
-  //      service worker is; they just tap the banner and the app reloads with
-  //      fresh code.
-  //   3. controllerchange listener — once a new SW activates and claims the
-  //      page, the page reloads automatically so the user sees the new code.
+  // What the user sees:
+  //   Normal case: nothing — the update happens before they even know.
+  //   Mid-session update: a brief page reload (less than 1 second).
+  //
+  // The "reload spam" guard:
+  //   Without protection, controllerchange could fire in a loop. We use a
+  //   sessionStorage flag with a timestamp to ensure we reload at most once
+  //   per 60 seconds, even if multiple SW updates cascade.
+  // ════════════════════════════════════════════════════════════════════════
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
       navigator.serviceWorker.register('/sw.js', {
@@ -9102,35 +8957,18 @@ window.toast               = toast;
         updateViaCache: 'none'
       })
       .then(async function(reg) {
-        // Force an immediate update check on every page load. Without this,
-        // the browser may wait up to 24 hours before checking for sw.js updates.
+        // Force an immediate update check on every page load. Browsers do
+        // this automatically when the SW is older than 24h, but we want it
+        // every load so updates propagate fast.
         try { reg.update(); } catch(e) {}
-        // Periodically (every 30 minutes while the page is open) re-check
-        // for SW updates. Catches users who keep the PWA open for long sessions.
+        // Re-check every 15 minutes for long-running sessions
         setInterval(function(){
           try { reg.update(); } catch(e) {}
-        }, 30 * 60 * 1000);
-
-        // Watch for a new SW being installed in the background. When one
-        // finishes installing, show the update banner so the user can apply
-        // it without restarting their browser or reinstalling the PWA.
-        function _watchForUpdate(installing){
-          if (!installing) return;
-          installing.addEventListener('statechange', function(){
-            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-              // A new SW is waiting to activate, and there's already a controlling
-              // SW — that means this is an update, not a first install.
-              _showUpdateBanner();
-            }
-          });
-        }
-        if (reg.waiting && navigator.serviceWorker.controller) {
-          // A waiting SW already exists (e.g. from a previous session) — show banner now
-          _showUpdateBanner();
-        }
-        _watchForUpdate(reg.installing);
-        reg.addEventListener('updatefound', function(){
-          _watchForUpdate(reg.installing);
+        }, 15 * 60 * 1000);
+        // Also re-check whenever the page regains focus (e.g. user returns
+        // to the PWA tab/window from elsewhere)
+        window.addEventListener('focus', function(){
+          try { reg.update(); } catch(e) {}
         });
 
         // Register periodic background sync (refreshes hymns hourly)
@@ -9141,7 +8979,6 @@ window.toast               = toast;
             });
           } catch(e) { /* periodicSync not permitted */ }
         }
-
         // Register background sync tag for offline queue flushing
         if ('sync' in reg) {
           try {
@@ -9153,18 +8990,23 @@ window.toast               = toast;
         console.warn('HymnDesk SW registration failed:', err);
       });
 
-      // When a new SW takes control of the page, reload so the user sees
-      // the new code. This fires after the waiting SW activates — either
-      // because the user tapped Update, or because it activated naturally
-      // (e.g. all tabs were closed).
-      var _reloadingForUpdate = false;
+      // Silent reload when a new SW takes control. Protected against rapid-fire
+      // reload loops by a 60-second cooldown stored in sessionStorage.
       navigator.serviceWorker.addEventListener('controllerchange', function(){
-        if (_reloadingForUpdate) return;
-        _reloadingForUpdate = true;
+        try {
+          var last = parseInt(sessionStorage.getItem('hd_sw_reload_at') || '0', 10);
+          if (Date.now() - last < 60000) {
+            // We just reloaded recently for a SW update; don't loop
+            return;
+          }
+          sessionStorage.setItem('hd_sw_reload_at', String(Date.now()));
+        } catch(e){}
+        // Use replace() rather than reload() so the reload doesn't leave a
+        // duplicate entry in the browser's history stack.
         window.location.reload();
       });
 
-      // Listen for messages from service worker
+      // Listen for messages from the service worker
       navigator.serviceWorker.addEventListener('message', function(event) {
         if (event.data && event.data.type === 'BACKGROUND_SYNC') {
           // Flush offline queues when SW triggers background sync
@@ -9173,35 +9015,6 @@ window.toast               = toast;
           if (typeof flushRatingQueue === 'function') flushRatingQueue();
         }
       });
-    });
-  }
-
-  // Banner shown when an update is ready. Designed to be unmistakable on
-  // both desktop and mobile, dismissable for users who want to wait, but
-  // persistent enough that PWA users actually see and apply updates.
-  function _showUpdateBanner(){
-    if (document.getElementById('hd-update-banner')) return; // already shown
-    var banner = document.createElement('div');
-    banner.id = 'hd-update-banner';
-    banner.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:80px;z-index:9999;background:#E8650A;color:#fff;padding:12px 18px;border-radius:50px;box-shadow:0 6px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:14px;font-family:sans-serif;font-size:14px;font-weight:600;max-width:92vw';
-    banner.innerHTML = '<span>A new version is available</span>'
-      + '<button id="hd-update-btn" style="background:#fff;color:#E8650A;border:none;border-radius:50px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:13px">Update now</button>'
-      + '<button id="hd-update-dismiss" style="background:transparent;color:#fff;border:none;font-size:18px;cursor:pointer;padding:0 4px;line-height:1" aria-label="Dismiss">&times;</button>';
-    document.body.appendChild(banner);
-    document.getElementById('hd-update-btn').addEventListener('click', function(){
-      // Tell the waiting SW to take over. The controllerchange listener will
-      // then reload the page automatically.
-      navigator.serviceWorker.getRegistration().then(function(reg){
-        if (reg && reg.waiting) {
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        } else {
-          // No waiting SW for some reason — just hard reload
-          window.location.reload();
-        }
-      });
-    });
-    document.getElementById('hd-update-dismiss').addEventListener('click', function(){
-      banner.remove();
     });
   }
 </script>
