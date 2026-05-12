@@ -2568,8 +2568,11 @@ var CloudSync = (function(){
       var uid = getUserId();
       if (!isConfigured() || !uid) return Promise.resolve({ ok:false, error:'not signed in or not configured' });
       var f = '&user_id=eq.' + encodeURIComponent(uid);
+      var trace = []; // collect a step-by-step trace so we can diagnose any failure
+      function tr(msg){ trace.push(msg); try { console.log('[restore]', msg); } catch(e){} }
       // Step 1 — fetch everything from the server FIRST, before wiping anything.
       // If the fetch fails, we don't want to have wiped local data.
+      tr('fetching from cloud');
       return Promise.all([
         rpc('GET', 'user_repertoires?select=*' + f),
         rpc('GET', 'user_repertoire_items?select=*' + f + '&order=item_order.asc'),
@@ -2580,10 +2583,11 @@ var CloudSync = (function(){
         var cloudItems   = (results[1] || []).filter(function(i){ return !i.deleted_at; });
         var cloudFavs    = (results[2] || []).filter(function(f){ return !f.deleted_at; });
         var cloudHistory = (results[3] || []).filter(function(h){ return !h.deleted_at; });
+        tr('fetched reps:' + cloudReps.length + ' items:' + cloudItems.length + ' favs:' + cloudFavs.length + ' history:' + cloudHistory.length);
 
         // Step 2 — replace local arrays with cloud data, fully and unambiguously.
         if (typeof repertoires !== 'undefined') {
-          // empty in place to keep the same array reference
+          tr('writing reps; before=' + repertoires.length);
           repertoires.length = 0;
           cloudReps.forEach(function(c){
             repertoires.push({
@@ -2594,8 +2598,12 @@ var CloudSync = (function(){
               _updatedAt: c.updated_at || Date.now()
             });
           });
+          tr('wrote reps; after=' + repertoires.length);
+        } else {
+          tr('SKIPPED reps — repertoires undefined');
         }
         if (typeof repItems !== 'undefined') {
+          tr('writing items; before=' + repItems.length);
           repItems.length = 0;
           cloudItems.forEach(function(c){
             repItems.push({
@@ -2614,11 +2622,18 @@ var CloudSync = (function(){
               _updatedAt: c.updated_at || Date.now()
             });
           });
+          tr('wrote items; after=' + repItems.length);
+        } else {
+          tr('SKIPPED items — repItems undefined');
         }
         if (typeof hymns !== 'undefined' && hymns) {
           var cloudFavSet = {};
           cloudFavs.forEach(function(c){ cloudFavSet[c.hymn_id] = true; });
-          hymns.forEach(function(h){ h.favourite = !!cloudFavSet[h.id]; });
+          var favCount = 0;
+          hymns.forEach(function(h){ h.favourite = !!cloudFavSet[h.id]; if (h.favourite) favCount++; });
+          tr('wrote favs; total marked=' + favCount + ' (of ' + cloudFavs.length + ' cloud favs)');
+        } else {
+          tr('SKIPPED favs — hymns array missing');
         }
         if (typeof serviceHistory !== 'undefined') {
           serviceHistory.length = 0;
@@ -2633,6 +2648,7 @@ var CloudSync = (function(){
               context: c.context
             });
           });
+          tr('wrote history; after=' + serviceHistory.length);
         }
 
         // Step 3 — clear pending deletions and tombstones so a fresh state is achieved.
@@ -2640,10 +2656,26 @@ var CloudSync = (function(){
         try { localStorage.removeItem('lh_cloud_tombstones'); } catch(e){}
 
         // Step 4 — persist to localStorage and re-render so the user sees the restored state.
+        // NOTE: save() triggers scheduleRepsPush/ItemsPush/HistoryPush which run
+        // in 1.5s. Those pushes will UPSERT the restored data back to the server
+        // — harmless but wasteful, since the data was just pulled. The bigger
+        // concern was whether anything BETWEEN our writes and the user reading
+        // the count clears the arrays. Capture counts right before and after save.
+        var reportCounts = {
+          reps: repertoires.length,
+          items: repItems.length,
+          favs: (hymns || []).filter(function(h){ return h.favourite; }).length,
+          history: serviceHistory.length
+        };
+        tr('pre-save counts: reps=' + reportCounts.reps + ' items=' + reportCounts.items + ' favs=' + reportCounts.favs + ' history=' + reportCounts.history);
         try {
           if (typeof save === 'function') save();
           if (typeof saveFavourites === 'function') saveFavourites();
-        } catch(e){}
+          tr('save() and saveFavourites() called');
+        } catch(e){ tr('save threw: ' + (e.message || e)); }
+        // Re-read counts after save — if these are different we have a real
+        // contamination problem to surface
+        tr('post-save counts: reps=' + repertoires.length + ' items=' + repItems.length);
         try { if (typeof renderRepList === 'function') renderRepList(); } catch(e){}
         try { if (typeof renderBookGrid === 'function') renderBookGrid(); } catch(e){}
 
@@ -2655,10 +2687,15 @@ var CloudSync = (function(){
             items: cloudItems.length,
             favs: cloudFavs.length,
             history: cloudHistory.length
-          }
+          },
+          // Include the actual local counts so the UI can compare cloud-received
+          // vs. local-written and detect any discrepancy.
+          localAfter: reportCounts,
+          trace: trace
         };
       }).catch(function(err){
-        return { ok:false, error: (err && err.message) ? err.message : String(err) };
+        tr('FAILED: ' + (err && err.message ? err.message : err));
+        return { ok:false, error: (err && err.message) ? err.message : String(err), trace: trace };
       });
     },
     // Fetches row counts from Supabase for the current user. Used by the
@@ -8711,21 +8748,33 @@ renderHeaderYtLink();
     if (el) el.textContent = 'Restoring from cloud...\n\nPlease wait.';
     CloudSync.forceRestoreFromCloud().then(function(res){
       if (!res || !res.ok) {
-        if (el) el.textContent = 'Restore failed: ' + (res && res.error ? res.error : 'unknown error');
+        var failMsg = 'Restore failed: ' + (res && res.error ? res.error : 'unknown error');
+        if (res && res.trace) failMsg += '\n\nTrace:\n' + res.trace.join('\n');
+        if (el) el.textContent = failMsg;
         return;
       }
-      // Show a clear success message, then refresh the full status
+      // Show a clear report with both the cloud counts AND what actually ended
+      // up in local arrays. If those don't match, we have a bug to find.
       if (el) {
-        el.textContent = 'Restore complete:\n'
+        var msg = 'Restore complete.\n\n'
+          + 'Pulled from cloud:\n'
           + '  Repertoires: ' + res.restored.reps + '\n'
           + '  Items:       ' + res.restored.items + '\n'
           + '  Favourites:  ' + res.restored.favs + '\n'
           + '  History:     ' + res.restored.history + '\n\n'
-          + 'Updating status...';
+          + 'Local state right after write:\n'
+          + '  Repertoires: ' + res.localAfter.reps + '\n'
+          + '  Items:       ' + res.localAfter.items + '\n'
+          + '  Favourites:  ' + res.localAfter.favs + '\n'
+          + '  History:     ' + res.localAfter.history;
+        if (res.trace && res.trace.length) {
+          msg += '\n\nTrace:\n' + res.trace.join('\n');
+        }
+        el.textContent = msg;
       }
-      setTimeout(function(){
-        if (typeof _renderAccountSyncInfo === 'function') _renderAccountSyncInfo();
-      }, 1500);
+      // Note: we do NOT auto-refresh _renderAccountSyncInfo here. Leaving the
+      // restore report visible so the user can see and screenshot exactly what
+      // happened. They can tap Refresh themselves when ready.
     });
   });
 
