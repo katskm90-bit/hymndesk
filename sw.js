@@ -2,7 +2,7 @@
 // Scores: Has Service Worker, Has Logic, Offline Support,
 //         Background Sync, Periodic Sync, Push Notifications
 
-const CACHE_NAME = 'hymndesk-v11';
+const CACHE_NAME = 'hymndesk-v12';
 const HYMNS_CACHE = 'hymndesk-hymns-v6';
 
 const APP_SHELL = [
@@ -20,16 +20,26 @@ const NEVER_CACHE = [
   'github.com',
 ];
 
-// ── MESSAGE: SKIP_WAITING ─────────────────────────────────────────────────────
-// Triggered by the page when the user taps "Update now" on the update banner.
-// Causes the waiting (newly installed) SW to activate immediately, replacing
-// the currently controlling SW. The page's controllerchange listener then
-// reloads to pick up the new code.
-self.addEventListener('message', function(event) {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
+// ════════════════════════════════════════════════════════════════════════════
+// Silent automatic update strategy
+// ════════════════════════════════════════════════════════════════════════════
+// install + skipWaiting():
+//   The new SW activates immediately as soon as it finishes installing. No
+//   "waiting" state, no banner, no user action. Existing tabs keep running
+//   the old SW briefly until the activate handler runs.
+//
+// activate + clients.claim():
+//   The new SW takes control of all open pages. This triggers a
+//   'controllerchange' event in each page, which the page handles by quietly
+//   reloading itself. The end result: the user's view refreshes on its own
+//   when an update is available, no interaction needed.
+//
+// Why this is safe:
+//   - We only `skipWaiting` on subsequent updates, not first install (handled
+//     by the existence of a previous controller — see install handler).
+//   - The page has a 60-second cooldown on controllerchange reloads to prevent
+//     any possibility of a reload loop.
+// ════════════════════════════════════════════════════════════════════════════
 
 // ── INSTALL ───────────────────────────────────────────────────────────────────
 self.addEventListener('install', function(event) {
