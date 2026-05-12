@@ -1542,6 +1542,7 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
           <button class="btn btn-ghost" id="account-sync-refresh-btn" style="flex:1;justify-content:center;font-size:11px;padding:6px">Refresh</button>
           <button class="btn btn-ghost" id="account-sync-restore-btn" style="flex:1;justify-content:center;font-size:11px;padding:6px;color:#E8650A;border-color:#E8650A">Restore from cloud</button>
         </div>
+        <button class="btn btn-ghost" id="account-force-update-btn" style="width:100%;justify-content:center;font-size:11px;padding:6px;margin-top:6px;color:#475569;border-color:#cbd5e1">Force app update (if stuck)</button>
       </details>
 
       <button class="auth-btn" id="do-logout-btn" style="background:linear-gradient(135deg,#475569,#334155)">Sign Out</button>
@@ -8778,6 +8779,43 @@ renderHeaderYtLink();
     });
   });
 
+  // "Force app update" — for users stuck on an old cached version (typically
+  // PWA users who installed weeks ago and haven't picked up updates). This
+  // unregisters all service workers, deletes all caches, and reloads. The
+  // next page load will fetch fresh code from the server.
+  bind('account-force-update-btn', 'click', function(){
+    var ok = confirm('This will check for and apply any app updates. You may briefly see a loading screen. Continue?');
+    if (!ok) return;
+    var el = document.getElementById('account-sync-info');
+    if (el) el.textContent = 'Forcing update...\n\nPlease wait, then the app will reload.';
+    Promise.resolve()
+      .then(function(){
+        // Step 1 — unregister all service workers
+        if (!('serviceWorker' in navigator)) return;
+        return navigator.serviceWorker.getRegistrations().then(function(regs){
+          return Promise.all(regs.map(function(r){ return r.unregister(); }));
+        });
+      })
+      .then(function(){
+        // Step 2 — delete all cache storage entries
+        if (!('caches' in window)) return;
+        return caches.keys().then(function(keys){
+          return Promise.all(keys.map(function(k){ return caches.delete(k); }));
+        });
+      })
+      .then(function(){
+        // Step 3 — hard reload, bypassing the HTTP cache
+        if (el) el.textContent = 'Update applied. Reloading...';
+        setTimeout(function(){
+          // Add a cache-busting query string so even the HTML fetch is fresh
+          window.location.href = window.location.pathname + '?u=' + Date.now();
+        }, 600);
+      })
+      .catch(function(err){
+        if (el) el.textContent = 'Update failed: ' + (err && err.message ? err.message : 'unknown error') + '\n\nTry again, or clear the browser cache manually.';
+      });
+  });
+
   // Inbox tabs (data-inbox-tab attribute carries the target tab id)
   Array.prototype.forEach.call(document.querySelectorAll('[data-inbox-tab]'), function(el){
     el.addEventListener('click', function(){ switchInboxTab(el.getAttribute('data-inbox-tab')); });
@@ -9040,33 +9078,91 @@ window.toast               = toast;
 </body>
 </html>
 <script>
-  // Register HymnDesk service worker
+  // Register HymnDesk service worker with aggressive update handling.
+  //
+  // Why this is more complex than a simple register() call:
+  //   Service workers cache themselves by default. A PWA installed weeks ago
+  //   may keep serving an outdated SW (and therefore stale app code) until the
+  //   browser happens to check for updates — sometimes days later. For sync
+  //   features that must stay in step across devices, that's unacceptable.
+  //
+  // Three things make this robust:
+  //   1. updateViaCache:'none' — the SW itself is never cached. Every page
+  //      load checks the network for an updated sw.js.
+  //   2. updatefound listener — when a new SW is detected, we offer the user
+  //      an immediate "Update now" banner. They don't have to know what a
+  //      service worker is; they just tap the banner and the app reloads with
+  //      fresh code.
+  //   3. controllerchange listener — once a new SW activates and claims the
+  //      page, the page reloads automatically so the user sees the new code.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        .then(async function(reg) {
-          // SW registered successfully
-          reg.update();
+      navigator.serviceWorker.register('/sw.js', {
+        scope: '/',
+        updateViaCache: 'none'
+      })
+      .then(async function(reg) {
+        // Force an immediate update check on every page load. Without this,
+        // the browser may wait up to 24 hours before checking for sw.js updates.
+        try { reg.update(); } catch(e) {}
+        // Periodically (every 30 minutes while the page is open) re-check
+        // for SW updates. Catches users who keep the PWA open for long sessions.
+        setInterval(function(){
+          try { reg.update(); } catch(e) {}
+        }, 30 * 60 * 1000);
 
-          // Register periodic background sync (refreshes hymns hourly)
-          if ('periodicSync' in reg) {
-            try {
-              await reg.periodicSync.register('hymndesk-hymn-refresh', {
-                minInterval: 60 * 60 * 1000 // 1 hour
-              });
-            } catch(e) { /* periodicSync not permitted */ }
-          }
-
-          // Register background sync tag for offline queue flushing
-          if ('sync' in reg) {
-            try {
-              await reg.sync.register('hymndesk-sync');
-            } catch(e) { /* sync not permitted */ }
-          }
-        })
-        .catch(function(err) {
-          console.warn('HymnDesk SW registration failed:', err);
+        // Watch for a new SW being installed in the background. When one
+        // finishes installing, show the update banner so the user can apply
+        // it without restarting their browser or reinstalling the PWA.
+        function _watchForUpdate(installing){
+          if (!installing) return;
+          installing.addEventListener('statechange', function(){
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              // A new SW is waiting to activate, and there's already a controlling
+              // SW — that means this is an update, not a first install.
+              _showUpdateBanner();
+            }
+          });
+        }
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          // A waiting SW already exists (e.g. from a previous session) — show banner now
+          _showUpdateBanner();
+        }
+        _watchForUpdate(reg.installing);
+        reg.addEventListener('updatefound', function(){
+          _watchForUpdate(reg.installing);
         });
+
+        // Register periodic background sync (refreshes hymns hourly)
+        if ('periodicSync' in reg) {
+          try {
+            await reg.periodicSync.register('hymndesk-hymn-refresh', {
+              minInterval: 60 * 60 * 1000 // 1 hour
+            });
+          } catch(e) { /* periodicSync not permitted */ }
+        }
+
+        // Register background sync tag for offline queue flushing
+        if ('sync' in reg) {
+          try {
+            await reg.sync.register('hymndesk-sync');
+          } catch(e) { /* sync not permitted */ }
+        }
+      })
+      .catch(function(err) {
+        console.warn('HymnDesk SW registration failed:', err);
+      });
+
+      // When a new SW takes control of the page, reload so the user sees
+      // the new code. This fires after the waiting SW activates — either
+      // because the user tapped Update, or because it activated naturally
+      // (e.g. all tabs were closed).
+      var _reloadingForUpdate = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function(){
+        if (_reloadingForUpdate) return;
+        _reloadingForUpdate = true;
+        window.location.reload();
+      });
 
       // Listen for messages from service worker
       navigator.serviceWorker.addEventListener('message', function(event) {
@@ -9077,6 +9173,35 @@ window.toast               = toast;
           if (typeof flushRatingQueue === 'function') flushRatingQueue();
         }
       });
+    });
+  }
+
+  // Banner shown when an update is ready. Designed to be unmistakable on
+  // both desktop and mobile, dismissable for users who want to wait, but
+  // persistent enough that PWA users actually see and apply updates.
+  function _showUpdateBanner(){
+    if (document.getElementById('hd-update-banner')) return; // already shown
+    var banner = document.createElement('div');
+    banner.id = 'hd-update-banner';
+    banner.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:80px;z-index:9999;background:#E8650A;color:#fff;padding:12px 18px;border-radius:50px;box-shadow:0 6px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:14px;font-family:sans-serif;font-size:14px;font-weight:600;max-width:92vw';
+    banner.innerHTML = '<span>A new version is available</span>'
+      + '<button id="hd-update-btn" style="background:#fff;color:#E8650A;border:none;border-radius:50px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:13px">Update now</button>'
+      + '<button id="hd-update-dismiss" style="background:transparent;color:#fff;border:none;font-size:18px;cursor:pointer;padding:0 4px;line-height:1" aria-label="Dismiss">&times;</button>';
+    document.body.appendChild(banner);
+    document.getElementById('hd-update-btn').addEventListener('click', function(){
+      // Tell the waiting SW to take over. The controllerchange listener will
+      // then reload the page automatically.
+      navigator.serviceWorker.getRegistration().then(function(reg){
+        if (reg && reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        } else {
+          // No waiting SW for some reason — just hard reload
+          window.location.reload();
+        }
+      });
+    });
+    document.getElementById('hd-update-dismiss').addEventListener('click', function(){
+      banner.remove();
     });
   }
 </script>
