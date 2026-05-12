@@ -2,7 +2,7 @@
 // Scores: Has Service Worker, Has Logic, Offline Support,
 //         Background Sync, Periodic Sync, Push Notifications
 
-const CACHE_NAME = 'hymndesk-v10';
+const CACHE_NAME = 'hymndesk-v11';
 const HYMNS_CACHE = 'hymndesk-hymns-v6';
 
 const APP_SHELL = [
@@ -19,6 +19,17 @@ const NEVER_CACHE = [
   'api.github.com',
   'github.com',
 ];
+
+// ── MESSAGE: SKIP_WAITING ─────────────────────────────────────────────────────
+// Triggered by the page when the user taps "Update now" on the update banner.
+// Causes the waiting (newly installed) SW to activate immediately, replacing
+// the currently controlling SW. The page's controllerchange listener then
+// reloads to pick up the new code.
+self.addEventListener('message', function(event) {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 // ── INSTALL ───────────────────────────────────────────────────────────────────
 self.addEventListener('install', function(event) {
