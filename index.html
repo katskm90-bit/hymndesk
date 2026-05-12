@@ -2075,7 +2075,9 @@ var CloudSync = (function(){
       return Promise.resolve();
     }
     var now = Date.now();
-    var rows = repertoires.map(function(r){
+    var rows = repertoires
+      .filter(function(r){ return !_hasTombstone('reps', r.id); })
+      .map(function(r){
       return {
         id: r.id,
         user_id: uid,
@@ -2114,7 +2116,9 @@ var CloudSync = (function(){
     var uid = getUserId();
     if (!uid) return Promise.resolve();
     var now = Date.now();
-    var rows = (repItems || []).map(function(i){
+    var rows = (repItems || [])
+      .filter(function(i){ return !_hasTombstone('items', i.id); })
+      .map(function(i){
       return {
         id: i.id,
         user_id: uid,
@@ -2170,15 +2174,20 @@ var CloudSync = (function(){
     if (!uid) return Promise.resolve();
     var now = Date.now();
     var favIds = hymns.filter(function(h){ return h.favourite; }).map(function(h){ return h.id; });
-    var rows = favIds.map(function(hid){
-      return {
-        user_id: uid,
-        hymn_id: hid,
-        created_at: now,
-        updated_at: now,
-        deleted_at: null
-      };
-    });
+    // Filter out any hymn IDs we have tombstoned. Even if h.favourite is true
+    // locally for some reason, do not push an "active" favourite for a hymn
+    // that was deleted remotely.
+    var rows = favIds
+      .filter(function(hid){ return !_hasTombstone('favs', hid); })
+      .map(function(hid){
+        return {
+          user_id: uid,
+          hymn_id: hid,
+          created_at: now,
+          updated_at: now,
+          deleted_at: null
+        };
+      });
     // Add soft-deletes for previously-favourited hymns now removed
     var pendingDel = _pendingDeletedFavs();
     pendingDel.forEach(function(hid){
@@ -2280,11 +2289,20 @@ var CloudSync = (function(){
       var cloudUpdated = c.updated_at || 0;
       var localUpdated = (local && local._updatedAt) || (local && local.createdAt) || 0;
       if (c.deleted_at) {
-        // Server says deleted — remove locally (or mark deleted)
+        // Server says deleted — remove locally AND tombstone the ID so any
+        // in-flight push on this device cannot resurrect it.
+        _addTombstone('reps', c.id);
         if (local && !local.deletedAt) {
           repertoires = repertoires.filter(function(r){ return r.id !== c.id; });
           changed = true;
         }
+        return;
+      }
+      // If the cloud reps says NOT deleted but we have it tombstoned, the
+      // server's "active" state is stale — skip the merge to avoid resurrecting.
+      // The deleting device's eventual push (or the next one) will reapply
+      // deleted_at; until then, we don't want to add this row back locally.
+      if (_hasTombstone('reps', c.id)) {
         return;
       }
       if (!local) {
@@ -2315,10 +2333,15 @@ var CloudSync = (function(){
       var cloudUpdated = c.updated_at || 0;
       var localUpdated = (local && local._updatedAt) || (local && local.createdAt) || 0;
       if (c.deleted_at) {
+        _addTombstone('items', c.id);
         if (local) {
           repItems = repItems.filter(function(i){ return i.id !== c.id; });
           changed = true;
         }
+        return;
+      }
+      // Tombstoned active row — skip; don't resurrect.
+      if (_hasTombstone('items', c.id)) {
         return;
       }
       var rebuilt = {
@@ -2353,13 +2376,22 @@ var CloudSync = (function(){
     var cloudActiveFavs = new Set();
     var cloudDeletedFavs = new Set();
     cloudFavs.forEach(function(c){
-      if (c.deleted_at) cloudDeletedFavs.add(c.hymn_id);
+      if (c.deleted_at) {
+        cloudDeletedFavs.add(c.hymn_id);
+        _addTombstone('favs', c.hymn_id);
+      }
       else cloudActiveFavs.add(c.hymn_id);
     });
     // Apply cloud activations
     hymns.forEach(function(h){
       var wasFav = h.favourite;
-      var shouldBeFav = cloudActiveFavs.has(h.id) || (localFavSet.has(h.id) && !cloudDeletedFavs.has(h.id));
+      // Suppress favourite status for any hymn we have tombstoned — those
+      // are deletions in flight that mustn't be undone by stale cloud data.
+      var tombstoned = _hasTombstone('favs', h.id);
+      var shouldBeFav = !tombstoned && (
+        cloudActiveFavs.has(h.id) ||
+        (localFavSet.has(h.id) && !cloudDeletedFavs.has(h.id))
+      );
       if (wasFav !== shouldBeFav) {
         h.favourite = shouldBeFav;
         changed = true;
@@ -2410,11 +2442,16 @@ var CloudSync = (function(){
     var s = _getDelStore();
     s.reps.push({ id: rep.id, name: rep.name, date: rep.date, createdAt: rep.createdAt, deletedAt: Date.now() });
     _saveDelStore(s);
+    // Also tombstone, so any merge of cloud data that still shows this rep
+    // as active (because the deleting push hasn't completed yet) won't put
+    // it back in our local list.
+    _addTombstone('reps', rep.id);
   }
   function trackDeletedItems(itemList){
     var s = _getDelStore();
     itemList.forEach(function(i){
       s.items.push({ id: i.id, repId: i.repId, itemType: i.itemType, hymnId: i.hymnId, createdAt: i.createdAt, deletedAt: Date.now() });
+      _addTombstone('items', i.id);
     });
     _saveDelStore(s);
   }
@@ -2422,6 +2459,7 @@ var CloudSync = (function(){
     var s = _getDelStore();
     if (s.favs.indexOf(hymnId) === -1) s.favs.push(hymnId);
     _saveDelStore(s);
+    _addTombstone('favs', hymnId);
   }
   function _pendingDeletedReps(){ return _getDelStore().reps || []; }
   function _pendingDeletedItems(){ return _getDelStore().items || []; }
@@ -2429,6 +2467,51 @@ var CloudSync = (function(){
   function _clearPendingDeletedReps(){ var s = _getDelStore(); s.reps = []; _saveDelStore(s); }
   function _clearPendingDeletedItems(){ var s = _getDelStore(); s.items = []; _saveDelStore(s); }
   function _clearPendingDeletedFavs(){ var s = _getDelStore(); s.favs = []; _saveDelStore(s); }
+
+  // ── TOMBSTONES — durable record of remotely-deleted IDs ──────────────────
+  // The problem they solve: when Device A deletes a rep and Device B pulls
+  // that deletion, mergeReps removes the rep from Device B's local list. But
+  // if Device B then pushes (because of an unrelated save), it would push all
+  // its OTHER reps — fine — but a push that happens to be in flight at the
+  // moment of the pull could resurrect the deleted row by upserting it with
+  // deleted_at:null. Tombstones close this race: any ID in the tombstone list
+  // is filtered out of pushes for 30 days, regardless of whether it's still
+  // hanging around in local arrays. After 30 days, the tombstone is forgotten
+  // — by then the server has had plenty of time to settle and any stale local
+  // copy is a re-insertion the user actually wants.
+  var TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  function _getTombstones(){
+    try {
+      var t = JSON.parse(localStorage.getItem('lh_cloud_tombstones') || '{"reps":{},"items":{},"favs":{}}');
+      // Backfill any missing keys for forward compatibility
+      if (!t.reps)  t.reps  = {};
+      if (!t.items) t.items = {};
+      if (!t.favs)  t.favs  = {};
+      return t;
+    } catch(e){ return { reps:{}, items:{}, favs:{} }; }
+  }
+  function _saveTombstones(t){
+    try { localStorage.setItem('lh_cloud_tombstones', JSON.stringify(t)); } catch(e){}
+  }
+  function _addTombstone(kind, id){
+    if (!id) return;
+    var t = _getTombstones();
+    t[kind][id] = Date.now();
+    _saveTombstones(t);
+  }
+  function _hasTombstone(kind, id){
+    if (!id) return false;
+    var t = _getTombstones();
+    var ts = t[kind] && t[kind][id];
+    if (!ts) return false;
+    if (Date.now() - ts > TOMBSTONE_TTL_MS) {
+      // Expired — clean it up and treat as untombstoned
+      delete t[kind][id];
+      _saveTombstones(t);
+      return false;
+    }
+    return true;
+  }
 
   // ── PUSH SCHEDULING — debounced, with retry-on-failure ───────────────────
   function _schedulePush(kind, fn){
