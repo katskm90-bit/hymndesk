@@ -2005,6 +2005,7 @@ var CloudSync = (function(){
   var pushTimers = {};          // keyed by 'reps' / 'items' / 'favs' / 'history'
   var retryDelays = {};         // current backoff per resource
   var lastPullAt = 0;
+  var lastPushAt = 0;
 
   // ── HELPERS ──────────────────────────────────────────────────────────────
   function log(){ try { if (window.__SYNC_DEBUG) console.log.apply(console, ['[CloudSync]'].concat([].slice.call(arguments))); } catch(e){} }
@@ -2110,6 +2111,7 @@ var CloudSync = (function(){
       'Prefer': 'resolution=merge-duplicates,return=minimal'
     }).then(function(){
       log('push reps ok', rows.length);
+      lastPushAt = Date.now();
       _clearPendingDeletedReps();
       retryDelays.reps = RETRY_BASE_MS;
     });
@@ -2164,6 +2166,7 @@ var CloudSync = (function(){
       'Prefer': 'resolution=merge-duplicates,return=minimal'
     }).then(function(){
       log('push items ok', rows.length);
+      lastPushAt = Date.now();
       _clearPendingDeletedItems();
       retryDelays.items = RETRY_BASE_MS;
     });
@@ -2200,6 +2203,7 @@ var CloudSync = (function(){
       'Prefer': 'resolution=merge-duplicates,return=minimal'
     }).then(function(){
       log('push favs ok', rows.length);
+      lastPushAt = Date.now();
       _clearPendingDeletedFavs();
       retryDelays.favs = RETRY_BASE_MS;
     });
@@ -2227,7 +2231,7 @@ var CloudSync = (function(){
     });
     return rpc('POST', 'user_service_history', rows, {
       'Prefer': 'resolution=merge-duplicates,return=minimal'
-    }).then(function(){ log('push history ok', rows.length); retryDelays.history = RETRY_BASE_MS; });
+    }).then(function(){ log('push history ok', rows.length); lastPushAt = Date.now(); retryDelays.history = RETRY_BASE_MS; });
   }
 
   // ── PULL: fetch all user data and merge into local state ─────────────────
@@ -2554,6 +2558,31 @@ var CloudSync = (function(){
     trackDeletedFav: trackDeletedFav,
     isConfigured: function(){ return isConfigured(); },
     isEnabled: function(){ return enabled; },
+    // Fetches row counts from Supabase for the current user. Used by the
+    // Sync Status panel to show local vs cloud counts side-by-side — the
+    // single most useful diagnostic when sync appears broken.
+    fetchCloudCounts: function(){
+      var uid = getUserId();
+      if (!isConfigured() || !uid) return Promise.resolve(null);
+      var f = '&user_id=eq.' + encodeURIComponent(uid);
+      // Filter out soft-deleted rows so the counts match what should be visible
+      var notDel = '&deleted_at=is.null';
+      return Promise.all([
+        rpc('GET', 'user_repertoires?select=id' + f + notDel),
+        rpc('GET', 'user_repertoire_items?select=id' + f + notDel),
+        rpc('GET', 'user_favourites?select=hymn_id' + f + notDel),
+        rpc('GET', 'user_service_history?select=id' + f + notDel)
+      ]).then(function(results){
+        return {
+          reps: (results[0] || []).length,
+          items: (results[1] || []).length,
+          favs: (results[2] || []).length,
+          history: (results[3] || []).length,
+          lastPull: lastPullAt ? new Date(lastPullAt).toLocaleTimeString() : 'never',
+          lastPush: lastPushAt ? new Date(lastPushAt).toLocaleTimeString() : 'never'
+        };
+      });
+    },
     // Manual diagnostic — run CloudSync.diag() in the browser console to see
     // exactly what state sync is in. Useful for troubleshooting.
     diag: function(){
@@ -5030,8 +5059,39 @@ function _renderAccountSyncInfo(){
             + 'On this device:\n'
             + '  Repertoires: ' + localReps + '\n'
             + '  Items:       ' + localItems + '\n'
-            + '  Favourites:  ' + localFavs;
+            + '  Favourites:  ' + localFavs + '\n\n'
+            + 'In the cloud (Supabase): checking...';
     el.textContent = msg;
+    // Asynchronously fetch the cloud counts so we can compare local vs server.
+    // This is the critical diagnostic — if cloud has data but local doesn't,
+    // it means pull is failing; if cloud is empty, push is failing.
+    if (enabled && configured && uid && typeof CloudSync.fetchCloudCounts === 'function') {
+      CloudSync.fetchCloudCounts().then(function(counts){
+        if (!counts) return;
+        var updated = 'Name:      ' + name + '\n'
+                    + 'Email:     ' + email + '\n'
+                    + 'User ID:   ' + uid + '\n\n'
+                    + 'Sync enabled:    ' + (enabled ? 'yes' : 'no') + '\n'
+                    + 'Sync configured: ' + (configured ? 'yes' : 'no') + '\n\n'
+                    + 'On this device:\n'
+                    + '  Repertoires: ' + localReps + '\n'
+                    + '  Items:       ' + localItems + '\n'
+                    + '  Favourites:  ' + localFavs + '\n\n'
+                    + 'In the cloud (Supabase):\n'
+                    + '  Repertoires: ' + counts.reps + '\n'
+                    + '  Items:       ' + counts.items + '\n'
+                    + '  Favourites:  ' + counts.favs + '\n'
+                    + '  History:     ' + counts.history + '\n\n'
+                    + 'Last pull:  ' + counts.lastPull + '\n'
+                    + 'Last push:  ' + counts.lastPush;
+        el.textContent = updated;
+      }).catch(function(err){
+        el.textContent = el.textContent.replace(
+          'In the cloud (Supabase): checking...',
+          'In the cloud (Supabase): error — ' + (err && err.message ? err.message : 'unknown')
+        );
+      });
+    }
   } catch(e){
     el.textContent = 'Unable to read sync state: ' + (e && e.message ? e.message : e);
   }
