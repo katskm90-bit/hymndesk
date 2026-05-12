@@ -1538,7 +1538,10 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
       <details style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:12px">
         <summary style="cursor:pointer;color:var(--text2);font-weight:600;user-select:none">Sync status (tap to view)</summary>
         <div id="account-sync-info" style="font-family:monospace;font-size:11px;line-height:1.7;color:var(--text);margin-top:10px;white-space:pre-wrap;word-break:break-all">Loading...</div>
-        <button class="btn btn-ghost" id="account-sync-refresh-btn" style="width:100%;justify-content:center;margin-top:8px;font-size:11px;padding:6px">Refresh</button>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost" id="account-sync-refresh-btn" style="flex:1;justify-content:center;font-size:11px;padding:6px">Refresh</button>
+          <button class="btn btn-ghost" id="account-sync-restore-btn" style="flex:1;justify-content:center;font-size:11px;padding:6px;color:#E8650A;border-color:#E8650A">Restore from cloud</button>
+        </div>
       </details>
 
       <button class="auth-btn" id="do-logout-btn" style="background:linear-gradient(135deg,#475569,#334155)">Sign Out</button>
@@ -2558,6 +2561,106 @@ var CloudSync = (function(){
     trackDeletedFav: trackDeletedFav,
     isConfigured: function(){ return isConfigured(); },
     isEnabled: function(){ return enabled; },
+    // Nuclear option: wipe local user data and force a fresh pull from the
+    // cloud. Use when a device has gotten out of sync and you want to start
+    // over from whatever the server has. Returns a report of what happened.
+    forceRestoreFromCloud: function(){
+      var uid = getUserId();
+      if (!isConfigured() || !uid) return Promise.resolve({ ok:false, error:'not signed in or not configured' });
+      var f = '&user_id=eq.' + encodeURIComponent(uid);
+      // Step 1 — fetch everything from the server FIRST, before wiping anything.
+      // If the fetch fails, we don't want to have wiped local data.
+      return Promise.all([
+        rpc('GET', 'user_repertoires?select=*' + f),
+        rpc('GET', 'user_repertoire_items?select=*' + f + '&order=item_order.asc'),
+        rpc('GET', 'user_favourites?select=*' + f),
+        rpc('GET', 'user_service_history?select=*' + f + '&order=played_at.desc&limit=200')
+      ]).then(function(results){
+        var cloudReps    = (results[0] || []).filter(function(r){ return !r.deleted_at; });
+        var cloudItems   = (results[1] || []).filter(function(i){ return !i.deleted_at; });
+        var cloudFavs    = (results[2] || []).filter(function(f){ return !f.deleted_at; });
+        var cloudHistory = (results[3] || []).filter(function(h){ return !h.deleted_at; });
+
+        // Step 2 — replace local arrays with cloud data, fully and unambiguously.
+        if (typeof repertoires !== 'undefined') {
+          // empty in place to keep the same array reference
+          repertoires.length = 0;
+          cloudReps.forEach(function(c){
+            repertoires.push({
+              id: c.id,
+              name: c.name || '',
+              date: c.rep_date || '',
+              createdAt: c.created_at || Date.now(),
+              _updatedAt: c.updated_at || Date.now()
+            });
+          });
+        }
+        if (typeof repItems !== 'undefined') {
+          repItems.length = 0;
+          cloudItems.forEach(function(c){
+            repItems.push({
+              id: c.id,
+              repId: c.rep_id,
+              itemType: c.item_type || 'hymn',
+              hymnId: c.hymn_id || undefined,
+              segName: c.seg_name || undefined,
+              segNote: c.seg_note || undefined,
+              annHeadline: c.ann_headline || undefined,
+              annBody: c.ann_body || undefined,
+              key: c.item_key || '',
+              repeatConfig: c.repeat_config || {},
+              order: typeof c.item_order === 'number' ? c.item_order : 0,
+              createdAt: c.created_at || Date.now(),
+              _updatedAt: c.updated_at || Date.now()
+            });
+          });
+        }
+        if (typeof hymns !== 'undefined' && hymns) {
+          var cloudFavSet = {};
+          cloudFavs.forEach(function(c){ cloudFavSet[c.hymn_id] = true; });
+          hymns.forEach(function(h){ h.favourite = !!cloudFavSet[h.id]; });
+        }
+        if (typeof serviceHistory !== 'undefined') {
+          serviceHistory.length = 0;
+          cloudHistory.forEach(function(c){
+            serviceHistory.push({
+              id: c.id,
+              hymnId: c.hymn_id,
+              title: c.hymn_title,
+              book: c.hymn_book,
+              number: c.hymn_number,
+              playedAt: c.played_at,
+              context: c.context
+            });
+          });
+        }
+
+        // Step 3 — clear pending deletions and tombstones so a fresh state is achieved.
+        try { localStorage.removeItem('lh_cloud_pending_dels'); } catch(e){}
+        try { localStorage.removeItem('lh_cloud_tombstones'); } catch(e){}
+
+        // Step 4 — persist to localStorage and re-render so the user sees the restored state.
+        try {
+          if (typeof save === 'function') save();
+          if (typeof saveFavourites === 'function') saveFavourites();
+        } catch(e){}
+        try { if (typeof renderRepList === 'function') renderRepList(); } catch(e){}
+        try { if (typeof renderBookGrid === 'function') renderBookGrid(); } catch(e){}
+
+        lastPullAt = Date.now();
+        return {
+          ok: true,
+          restored: {
+            reps: cloudReps.length,
+            items: cloudItems.length,
+            favs: cloudFavs.length,
+            history: cloudHistory.length
+          }
+        };
+      }).catch(function(err){
+        return { ok:false, error: (err && err.message) ? err.message : String(err) };
+      });
+    },
     // Fetches row counts from Supabase for the current user. Used by the
     // Sync Status panel to show local vs cloud counts side-by-side — the
     // single most useful diagnostic when sync appears broken.
@@ -8592,6 +8695,38 @@ renderHeaderYtLink();
   // Sync info refresh button inside My Account modal
   bind('account-sync-refresh-btn', 'click', function(){
     if (typeof _renderAccountSyncInfo === 'function') _renderAccountSyncInfo();
+  });
+
+  // "Restore from cloud" — wipes local data and re-pulls from server. The
+  // user is asked to confirm because this is destructive of any unsaved local
+  // changes (though everything should already be in the cloud anyway).
+  bind('account-sync-restore-btn', 'click', function(){
+    if (typeof CloudSync === 'undefined' || !CloudSync.forceRestoreFromCloud) {
+      alert('Sync not available right now.');
+      return;
+    }
+    var ok = confirm('This will replace all repertoires, items, favourites and history on this device with what is in the cloud.\n\nUse this only if this device is showing different data from your other devices.\n\nProceed?');
+    if (!ok) return;
+    var el = document.getElementById('account-sync-info');
+    if (el) el.textContent = 'Restoring from cloud...\n\nPlease wait.';
+    CloudSync.forceRestoreFromCloud().then(function(res){
+      if (!res || !res.ok) {
+        if (el) el.textContent = 'Restore failed: ' + (res && res.error ? res.error : 'unknown error');
+        return;
+      }
+      // Show a clear success message, then refresh the full status
+      if (el) {
+        el.textContent = 'Restore complete:\n'
+          + '  Repertoires: ' + res.restored.reps + '\n'
+          + '  Items:       ' + res.restored.items + '\n'
+          + '  Favourites:  ' + res.restored.favs + '\n'
+          + '  History:     ' + res.restored.history + '\n\n'
+          + 'Updating status...';
+      }
+      setTimeout(function(){
+        if (typeof _renderAccountSyncInfo === 'function') _renderAccountSyncInfo();
+      }, 1500);
+    });
   });
 
   // Inbox tabs (data-inbox-tab attribute carries the target tab id)
