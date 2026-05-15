@@ -7,7 +7,7 @@
 //   - Activates immediately on install (skipWaiting + clients.claim) so PWAs
 //     auto-update silently in one cycle.
 
-const CACHE_NAME = 'hymndesk-v14';
+const CACHE_NAME = 'hymndesk-v15';
 const HYMNS_CACHE = 'hymndesk-hymns-v6';
 
 const APP_SHELL = [
