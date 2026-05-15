@@ -2042,6 +2042,30 @@ var CloudSync = (function(){
   var draining   = false;
   var pulling    = false;
   var lastUserId = null;
+
+  // Recently-deleted ledger. When we issue a delete operation, we put the
+  // ID here with a timestamp. For the next ~30 seconds, any pull that
+  // returns this ID will filter it out. This protects against the race
+  // where a pull is issued before our DELETE reaches the server, so the
+  // GET response still includes the row we already deleted.
+  // After the TTL expires, the entry is forgotten — by then any pull
+  // result will reliably reflect the deletion.
+  var RECENT_DELETE_TTL_MS = 30 * 1000;
+  var recentlyDeleted = { reps: {}, items: {}, favs: {} };
+  function _markRecentlyDeleted(kind, id){
+    if (!id) return;
+    recentlyDeleted[kind][id] = Date.now();
+  }
+  function _isRecentlyDeleted(kind, id){
+    if (!id) return false;
+    var ts = recentlyDeleted[kind][id];
+    if (!ts) return false;
+    if (Date.now() - ts > RECENT_DELETE_TTL_MS) {
+      delete recentlyDeleted[kind][id];
+      return false;
+    }
+    return true;
+  }
   var log = function(){ try { console.log.apply(console, ['[CloudSync v3]'].concat([].slice.call(arguments))); } catch(e){} };
 
   function isConfigured(){
@@ -2122,6 +2146,19 @@ var CloudSync = (function(){
       if (!q.length) { draining = false; return Promise.resolve(); }
       var op = q[0];
       return _executeOp(op).then(function(){
+        // Refresh the recently-deleted ledger on successful drain so the
+        // TTL window starts from server-confirmed deletion, not just from
+        // when the user clicked. This is the firmest possible guarantee
+        // that an immediately-following pull won't resurrect the row.
+        try {
+          if (op.type === 'deleteRep' && op.payload && op.payload.id) {
+            _markRecentlyDeleted('reps', op.payload.id);
+          } else if (op.type === 'deleteItems' && op.payload && op.payload.ids) {
+            op.payload.ids.forEach(function(id){ _markRecentlyDeleted('items', id); });
+          } else if (op.type === 'removeFav' && op.payload && op.payload.hymnId) {
+            _markRecentlyDeleted('favs', op.payload.hymnId);
+          }
+        } catch(e){}
         _shift();
         return step();
       }).catch(function(err){
@@ -2277,6 +2314,49 @@ var CloudSync = (function(){
       var cloudItems   = results[1] || [];
       var cloudFavs    = results[2] || [];
       var cloudHistory = results[3] || [];
+
+      // Build a set of IDs that must be excluded from the pull result.
+      // Two sources, both critical:
+      //   1. Pending DELETE operations still in the queue (delete issued
+      //      but not yet sent to the server, or being sent right now).
+      //   2. The recently-deleted ledger — IDs deleted in the last 30s
+      //      whose DELETE has already drained from the queue. The server
+      //      should have processed those deletes by now, but if the GET
+      //      we just issued was sent BEFORE the DELETE was committed, the
+      //      response will still contain the row. We must not let those
+      //      ghosts back into local state.
+      // This is the single most important guard in v3: anything we have
+      // deleted, locally or recently, wins over server reads.
+      var pendingDelReps  = {};
+      var pendingDelItems = {};
+      var pendingDelFavs  = {};
+      try {
+        var q = _readQueue();
+        q.forEach(function(op){
+          if (op.type === 'deleteRep' && op.payload && op.payload.id) {
+            pendingDelReps[op.payload.id] = true;
+          } else if (op.type === 'deleteItems' && op.payload && op.payload.ids) {
+            op.payload.ids.forEach(function(id){ pendingDelItems[id] = true; });
+          } else if (op.type === 'removeFav' && op.payload && op.payload.hymnId) {
+            pendingDelFavs[op.payload.hymnId] = true;
+          }
+        });
+      } catch(e){}
+
+      // Apply pending + recent-delete filter. A rep whose parent is
+      // pending-deleted also has its items filtered out.
+      cloudReps = cloudReps.filter(function(r){
+        return !pendingDelReps[r.id] && !_isRecentlyDeleted('reps', r.id);
+      });
+      cloudItems = cloudItems.filter(function(i){
+        return !pendingDelItems[i.id]
+            && !pendingDelReps[i.rep_id]
+            && !_isRecentlyDeleted('items', i.id)
+            && !_isRecentlyDeleted('reps', i.rep_id);
+      });
+      cloudFavs = cloudFavs.filter(function(f){
+        return !pendingDelFavs[f.hymn_id] && !_isRecentlyDeleted('favs', f.hymn_id);
+      });
 
       // Replace local repertoires with the server's version. We empty in
       // place to preserve the array reference for any view code holding it.
@@ -2484,13 +2564,22 @@ var CloudSync = (function(){
     var favDiff  = _diffFavs();
 
     repDiff.upserts.forEach(function(r){ emit({ type: 'upsertRep', payload: r }); });
-    repDiff.deletes.forEach(function(id){ emit({ type: 'deleteRep', payload: { id: id } }); });
+    repDiff.deletes.forEach(function(id){
+      _markRecentlyDeleted('reps', id);
+      emit({ type: 'deleteRep', payload: { id: id } });
+    });
 
     if (itemDiff.upserts.length) emit({ type: 'upsertItems', payload: { items: itemDiff.upserts } });
-    if (itemDiff.deletes.length) emit({ type: 'deleteItems', payload: { ids: itemDiff.deletes } });
+    if (itemDiff.deletes.length) {
+      itemDiff.deletes.forEach(function(id){ _markRecentlyDeleted('items', id); });
+      emit({ type: 'deleteItems', payload: { ids: itemDiff.deletes } });
+    }
 
     favDiff.adds.forEach(function(id){ emit({ type: 'addFav', payload: { hymnId: id } }); });
-    favDiff.removes.forEach(function(id){ emit({ type: 'removeFav', payload: { hymnId: id } }); });
+    favDiff.removes.forEach(function(id){
+      _markRecentlyDeleted('favs', id);
+      emit({ type: 'removeFav', payload: { hymnId: id } });
+    });
 
     // Update snapshot to current state so subsequent diffs find no false
     // positives. Snapshot is updated EVEN IF queue drain hasn't completed —
@@ -2523,13 +2612,19 @@ var CloudSync = (function(){
   // the next debounce.
   function trackDeletedRep(rep){
     if (!rep || !rep.id) return;
+    // Mark recently deleted FIRST so any pull racing this delete will
+    // exclude the row from local state.
+    _markRecentlyDeleted('reps', rep.id);
     emit({ type: 'deleteRep', payload: { id: rep.id } });
     // Update snapshot so the subsequent diff doesn't re-emit
     var snap = _getSnapshot();
     if (snap.reps) delete snap.reps[rep.id];
     if (snap.items) {
       Object.keys(snap.items).forEach(function(iid){
-        if (snap.items[iid] && snap.items[iid].repId === rep.id) delete snap.items[iid];
+        if (snap.items[iid] && snap.items[iid].repId === rep.id) {
+          _markRecentlyDeleted('items', iid);
+          delete snap.items[iid];
+        }
       });
     }
     try { localStorage.setItem(_snapshotKey(), JSON.stringify(snap)); } catch(e){}
@@ -2538,6 +2633,7 @@ var CloudSync = (function(){
     if (!itemList || !itemList.length) return;
     var ids = itemList.map(function(i){ return i.id; }).filter(Boolean);
     if (!ids.length) return;
+    ids.forEach(function(id){ _markRecentlyDeleted('items', id); });
     emit({ type: 'deleteItems', payload: { ids: ids } });
     var snap = _getSnapshot();
     if (snap.items) {
@@ -2547,6 +2643,7 @@ var CloudSync = (function(){
   }
   function trackDeletedFav(hymnId){
     if (!hymnId) return;
+    _markRecentlyDeleted('favs', hymnId);
     emit({ type: 'removeFav', payload: { hymnId: hymnId } });
     var snap = _getSnapshot();
     if (snap.favs) delete snap.favs[hymnId];
