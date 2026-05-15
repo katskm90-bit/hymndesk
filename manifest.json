@@ -24,7 +24,7 @@
   ],
 
   "scope_extensions": [
-    { "origin": "https://www.hymndesk.co.za" }
+    { "type": "origin", "origin": "https://www.hymndesk.co.za" }
   ],
 
   "display_override": ["standalone"],
@@ -88,6 +88,7 @@
   "share_target": {
     "action": "/",
     "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
     "params": {
       "title": "title",
       "text": "text",
