@@ -1,8 +1,13 @@
-// HymnDesk Service Worker — v2.0
-// Scores: Has Service Worker, Has Logic, Offline Support,
-//         Background Sync, Periodic Sync, Push Notifications
+// HymnDesk Service Worker — v3.0
+// Strategy:
+//   - App shell (HTML/JS/manifest/sw.js): network-first, cache fallback
+//   - Hymn library (hymns.json): network-first with cache fallback for offline
+//   - Supabase API: never cached, never intercepted — all sync calls go direct
+//   - Static assets: cache-first
+//   - Activates immediately on install (skipWaiting + clients.claim) so PWAs
+//     auto-update silently in one cycle.
 
-const CACHE_NAME = 'hymndesk-v13';
+const CACHE_NAME = 'hymndesk-v14';
 const HYMNS_CACHE = 'hymndesk-hymns-v6';
 
 const APP_SHELL = [
@@ -11,6 +16,9 @@ const APP_SHELL = [
   '/manifest.json',
 ];
 
+// Hosts whose requests must NEVER be intercepted or cached by the SW.
+// Supabase REST writes (POST / PATCH / DELETE) are the critical case —
+// if we ever cache or interfere with them, sync silently breaks.
 const NEVER_CACHE = [
   'script.google.com',
   'google.com/macros',
@@ -18,6 +26,8 @@ const NEVER_CACHE = [
   'raw.githubusercontent.com',
   'api.github.com',
   'github.com',
+  'supabase.co',
+  'supabase.in',
 ];
 
 // ════════════════════════════════════════════════════════════════════════════
