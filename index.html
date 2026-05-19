@@ -5070,7 +5070,9 @@ async function flushRatingQueue(){
 // Also flush after successful hymn sync (we know we are online)
 
 // ── USER AUTH SYSTEM ─────────────────────────────────────────────────────────
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbw6W48l8nqbLWA-_lemYUCQLmPk9fcAuSBc6vjxVlovtx7N0VDyC3TDB63xctR2k-Z9eg/exec';
+// All authentication and app-wide data calls go through gasCall() below, which
+// now routes to Supabase exclusively. The legacy Google Apps Script backend
+// has been retired and is no longer reached by any code path.
 
 var currentUser = null;
 
@@ -5143,15 +5145,370 @@ function loadUserSession(){
   currentUser = null;
 }
 
-// ── API call to Apps Script ───────────────────────────────────────────────────
+// ── API DISPATCHER — routes all backend calls to Supabase ────────────────────
+// The function name "gasCall" is retained for backward compatibility with the
+// many existing call sites in the app. Internally it now dispatches to
+// Supabase REST and RPC endpoints. The Google Apps Script backend is no
+// longer used anywhere.
+//
+// Response shape is preserved across all actions so the existing UI code
+// continues to work without changes: { success: bool, message?: string, ... }
+// where additional fields depend on the action.
 async function gasCall(payload){
-  const res = await fetch(GAS_URL, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-    headers: { 'Content-Type': 'text/plain' } // avoids CORS preflight
-  });
-  if(!res.ok) throw new Error('Network error — please try again.');
-  return await res.json();
+  if (!payload || !payload.action) throw new Error('Invalid request');
+
+  // Supabase config — same project as the user-data sync uses
+  var SUPABASE_BASE     = 'https://qszwtpoqvnjstsbihrkv.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzend0cG9xdm5qc3RzYmlocmt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzOTc0ODMsImV4cCI6MjA5Mzk3MzQ4M30.NIbsrmfkxQwE5kB99LJjKaegQwSFw_nDTLZz5J07b1E';
+
+  // Internal helper: SHA-256 hash a password. Used before sending creds
+  // to Supabase so the wire never carries a plain-text password.
+  async function _sha256(text){
+    if (!window.crypto || !window.crypto.subtle) {
+      throw new Error('Secure hashing unavailable. Please use the app over HTTPS.');
+    }
+    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(function(b){
+      return b.toString(16).padStart(2,'0');
+    }).join('');
+  }
+
+  // Internal helper: HTTP call to Supabase REST or RPC.
+  async function _sb(method, path, body, extraHeaders){
+    var url = SUPABASE_BASE + '/rest/v1/' + path;
+    var headers = {
+      'apikey':        SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+      'Content-Type':  'application/json',
+      'Accept':        'application/json'
+    };
+    if (extraHeaders) for (var k in extraHeaders) headers[k] = extraHeaders[k];
+    var init = { method: method, headers: headers, cache: 'no-store' };
+    if (body !== undefined && body !== null) init.body = JSON.stringify(body);
+    var res = await fetch(url, init);
+    if (!res.ok) {
+      var msg = '';
+      try { msg = await res.text(); } catch(e){}
+      throw new Error('Supabase ' + res.status + ': ' + (msg || res.statusText).slice(0, 200));
+    }
+    if (res.status === 204) return null;
+    var ct = res.headers.get('content-type') || '';
+    if (ct.indexOf('application/json') !== -1) return await res.json();
+    return await res.text();
+  }
+
+  // Internal helper: PostgREST URL filter encoder
+  function _enc(v){ return encodeURIComponent(v); }
+
+  // ── Action handlers ──────────────────────────────────────────────────────
+  try {
+    switch (payload.action) {
+
+      // ── Auth ────────────────────────────────────────────────────────────
+      case 'login': {
+        if (!payload.email || !payload.password) {
+          return { success: false, message: 'Email and password required.' };
+        }
+        var hash = await _sha256(payload.password);
+        var rows = await _sb('POST', 'rpc/login_user', {
+          p_email:  payload.email,
+          p_hash:   hash,
+          p_device: payload.device || null
+        });
+        if (!rows || !rows.length) {
+          return { success: false, message: 'Invalid email or password.' };
+        }
+        var u = rows[0];
+        return { success: true, user: {
+          id: u.id, name: u.name, email: u.email,
+          church: u.church, conference: u.conference, country: u.country,
+          isAdmin: !!u.is_admin, createdAt: u.created_at
+        }};
+      }
+
+      case 'register': {
+        var f = ['email','password','name','church','conference','country'];
+        for (var i=0; i<f.length; i++) {
+          if (!payload[f[i]]) return { success: false, message: 'All fields are required.' };
+        }
+        var hash = await _sha256(payload.password);
+        var newId = 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+        try {
+          var rows = await _sb('POST', 'rpc/register_user', {
+            p_id:         newId,
+            p_email:      payload.email,
+            p_name:       payload.name,
+            p_hash:       hash,
+            p_church:     payload.church,
+            p_conference: payload.conference,
+            p_country:    payload.country,
+            p_device:     payload.device || null
+          });
+          var u = rows && rows[0];
+          if (!u) return { success: false, message: 'Could not create account.' };
+          return { success: true, user: {
+            id: u.id, name: u.name, email: u.email,
+            church: u.church, conference: u.conference, country: u.country,
+            isAdmin: !!u.is_admin, createdAt: u.created_at
+          }};
+        } catch(e){
+          // Unique-violation on email → friendly message
+          if (/duplicate key|unique constraint|users_email_key/i.test(e.message)) {
+            return { success: false, message: 'An account already exists for that email.' };
+          }
+          return { success: false, message: 'Registration failed: ' + e.message };
+        }
+      }
+
+      case 'forgotPassword': {
+        if (!payload.email) return { success: false, message: 'Email required.' };
+        var ok = await _sb('POST', 'rpc/request_password_reset', { p_email: payload.email });
+        // Do not reveal whether the email exists — same response either way
+        return { success: true, message: 'If an account exists for that email, a reset code has been generated. Contact the administrator if you do not receive it.' };
+      }
+
+      case 'resetPassword': {
+        if (!payload.email || !payload.code || !payload.newPassword) {
+          return { success: false, message: 'Email, code and new password required.' };
+        }
+        var hash = await _sha256(payload.newPassword);
+        var ok = await _sb('POST', 'rpc/reset_password', {
+          p_email:    payload.email,
+          p_code:     String(payload.code).trim(),
+          p_new_hash: hash
+        });
+        if (ok !== true) {
+          return { success: false, message: 'Invalid or expired reset code.' };
+        }
+        return { success: true };
+      }
+
+      case 'updateProfile': {
+        if (!payload.userId) return { success: false, message: 'Not signed in.' };
+        var rows = await _sb('POST', 'rpc/update_user_profile', {
+          p_id:         payload.userId,
+          p_name:       payload.name       || '',
+          p_church:     payload.church     || '',
+          p_conference: payload.conference || '',
+          p_country:    payload.country    || ''
+        });
+        var u = rows && rows[0];
+        if (!u) return { success: false, message: 'Could not update profile.' };
+        return { success: true, user: {
+          id: u.id, name: u.name, email: u.email,
+          church: u.church, conference: u.conference, country: u.country
+        }};
+      }
+
+      // ── Usage analytics ────────────────────────────────────────────────
+      case 'trackUsage': {
+        var events = payload.events || [];
+        if (!events.length) return { success: true };
+        var rows = events.map(function(ev){
+          return {
+            user_id:     ev.userId || null,
+            event_type:  ev.event  || ev.type || 'unknown',
+            event_data:  ev.data   || ev,
+            device_info: ev.device || null,
+            created_at:  ev.timestamp || Date.now()
+          };
+        });
+        await _sb('POST', 'app_usage_events', rows,
+          { 'Prefer': 'return=minimal' });
+        return { success: true };
+      }
+
+      // ── Feedback ────────────────────────────────────────────────────────
+      case 'userFeedback': {
+        await _sb('POST', 'user_feedback', [{
+          user_id:     payload.userId || null,
+          name:        payload.name   || null,
+          type:        payload.type   || null,
+          message:     payload.message || '',
+          device_info: payload.device  || null,
+          created_at:  Date.now()
+        }], { 'Prefer': 'return=minimal' });
+        return { success: true };
+      }
+      case 'getUserFeedback': {
+        var rows = await _sb('GET', 'user_feedback?select=*&order=created_at.desc&limit=500');
+        // Translate rows back to the legacy shape the admin UI expects
+        var items = (rows || []).map(function(r){
+          return {
+            id:        r.id,
+            userId:    r.user_id,
+            name:      r.name,
+            type:      r.type,
+            message:   r.message,
+            device:    r.device_info,
+            status:    r.status,
+            createdAt: r.created_at,
+            timestamp: r.created_at
+          };
+        });
+        return { success: true, feedback: items, items: items };
+      }
+
+      // ── Ratings ─────────────────────────────────────────────────────────
+      case 'submitRating': {
+        await _sb('POST', 'app_ratings', [{
+          user_id:    payload.userId || null,
+          rating:     parseInt(payload.rating, 10) || 0,
+          comment:    payload.comment || null,
+          created_at: Date.now()
+        }], { 'Prefer': 'return=minimal' });
+        return { success: true };
+      }
+      case 'getRatings': {
+        var rows = await _sb('GET', 'app_ratings?select=*&order=created_at.desc&limit=500');
+        var items = (rows || []).map(function(r){
+          return {
+            id:        r.id,
+            userId:    r.user_id,
+            rating:    r.rating,
+            comment:   r.comment,
+            createdAt: r.created_at,
+            timestamp: r.created_at
+          };
+        });
+        return { success: true, ratings: items, items: items };
+      }
+
+      // ── Ad enquiries ────────────────────────────────────────────────────
+      case 'adEnquiry': {
+        await _sb('POST', 'ad_enquiries', [{
+          user_id:        payload.userId || null,
+          slide_headline: payload.slideHeadline || null,
+          contact_name:   payload.name || null,
+          contact:        payload.contact || null,
+          message:        payload.msg || payload.message || '',
+          created_at:     Date.now()
+        }], { 'Prefer': 'return=minimal' });
+        return { success: true };
+      }
+      case 'getAdEnquiries': {
+        var rows = await _sb('GET', 'ad_enquiries?select=*&order=created_at.desc&limit=500');
+        var items = (rows || []).map(function(r){
+          return {
+            id:             r.id,
+            userId:         r.user_id,
+            slideHeadline:  r.slide_headline,
+            name:           r.contact_name,
+            contact:        r.contact,
+            msg:            r.message,
+            message:        r.message,
+            createdAt:      r.created_at,
+            timestamp:      r.created_at
+          };
+        });
+        return { success: true, enquiries: items, items: items };
+      }
+
+      // ── Shared repertoires ──────────────────────────────────────────────
+      case 'saveSharedRep': {
+        if (!payload.shareCode) return { success: false, message: 'No share code.' };
+        await _sb('POST', 'shared_repertoires', [{
+          share_code: payload.shareCode,
+          name:       payload.name || '',
+          rep_date:   payload.date || null,
+          refs:       payload.refs || [],
+          updated_at: payload.updatedAt || Date.now()
+        }], { 'Prefer': 'resolution=merge-duplicates,return=minimal' });
+        return { success: true };
+      }
+      case 'getSharedReps': {
+        var codes = payload.codes || [];
+        if (!codes.length) return { success: true, reps: [] };
+        var inList = codes.map(_enc).join(',');
+        var rows = await _sb('GET',
+          'shared_repertoires?select=*&share_code=in.(' + inList + ')');
+        var items = (rows || []).map(function(r){
+          return {
+            shareCode: r.share_code,
+            name:      r.name,
+            date:      r.rep_date,
+            refs:      r.refs || [],
+            updatedAt: r.updated_at
+          };
+        });
+        return { success: true, reps: items };
+      }
+
+      // ── Admin analytics ─────────────────────────────────────────────────
+      case 'stats': {
+        // Pull users via the RPC (which is security-definer so it bypasses
+        // the users-table RLS lockdown without exposing password hashes)
+        // and logins via direct SELECT. Aggregate client-side.
+        var usersRows = [];
+        var loginsRows = [];
+        try {
+          usersRows = await _sb('POST', 'rpc/get_admin_users', {});
+        } catch(err){
+          throw new Error('Could not load users: ' + err.message);
+        }
+        try {
+          loginsRows = await _sb('GET', 'app_logins?select=user_id,name,email,timestamp&order=timestamp.desc&limit=2000');
+        } catch(err){
+          // If logins fail, just continue with empty — better partial stats than no stats
+          loginsRows = [];
+        }
+
+        var users  = usersRows  || [];
+        var logins = loginsRows || [];
+
+        // Build country / church / conference breakdowns
+        var countries   = {};
+        var churches    = {};
+        var conferences = {};
+        users.forEach(function(u){
+          if (u.country)    countries[u.country]       = (countries[u.country]||0) + 1;
+          if (u.church)     churches[u.church]         = (churches[u.church]||0) + 1;
+          if (u.conference) conferences[u.conference]  = (conferences[u.conference]||0) + 1;
+        });
+
+        return {
+          success:      true,
+          totalUsers:   users.length,
+          allUsers:     users.map(function(u){
+            return {
+              id:         u.id,
+              name:       u.name,
+              email:      u.email,
+              church:     u.church,
+              conference: u.conference,
+              country:    u.country,
+              createdAt:  u.created_at ? new Date(u.created_at).toISOString() : null
+            };
+          }),
+          loginHistory: logins.map(function(l){
+            return {
+              userId:    l.user_id,
+              name:      l.name,
+              email:     l.email,
+              timestamp: l.timestamp ? new Date(l.timestamp).toISOString() : null
+            };
+          }),
+          countries:    countries,
+          churches:     churches,
+          conferences:  conferences,
+          recent:       users.slice(0, 12).map(function(u){
+            return {
+              id:         u.id,
+              name:       u.name,
+              church:     u.church,
+              country:    u.country,
+              createdAt:  u.created_at ? new Date(u.created_at).toISOString() : null
+            };
+          })
+        };
+      }
+
+      default:
+        return { success: false, message: 'Unknown action: ' + payload.action };
+    }
+  } catch(err){
+    return { success: false, message: err && err.message ? err.message : 'Network error — please try again.' };
+  }
 }
 
 // ── Render header user button ─────────────────────────────────────────────────
@@ -5541,7 +5898,7 @@ async function loadStats(){
         +'</div>';
     }).join('') || '<p style="color:var(--text3);font-size:12px;padding:10px 0">No registrations yet.</p>';
 
-    document.getElementById('stats-updated').textContent = 'Live · Google Sheets · ' + new Date().toLocaleTimeString('en-ZA');
+    document.getElementById('stats-updated').textContent = 'Live · Supabase · ' + new Date().toLocaleTimeString('en-ZA');
     populateDrillDowns(res);
     document.getElementById('stats-loading').style.display = 'none';
     document.getElementById('stats-content').style.display = 'block';
@@ -6904,7 +7261,7 @@ function renderAnalytics(){
 
   // Honest caveat
   html += '<div style="font-size:11px;color:var(--text4);padding:10px 12px;background:var(--bg3);border-radius:9px;line-height:1.5">' +
-    '<strong style="color:var(--text3)">Scope of this view:</strong> data is aggregated from this device\'s local service history only. For aggregate user counts across all installs — who, when, from where — the Google Apps Script backend will need a query endpoint (currently it records usage but does not query it). That work is planned as a separate session.' +
+    '<strong style="color:var(--text3)">Scope of this view:</strong> data is aggregated from this device\'s local service history only. For aggregate user counts across all installs — who, when, from where — see the Usage Analytics dashboard which queries Supabase directly.' +
   '</div>';
 
   body.innerHTML = html;
@@ -7457,7 +7814,7 @@ function openAdEnquiry(slideIndex){
 
 // ── PRIVACY POLICY & TERMS MODALS ─────────────────────────────────────────────
 (function(){
-  var policyHtml='<h2 class="modal-title">Privacy Policy</h2><p class="modal-sub">HymnDesk · Serenza Music Realm · In compliance with POPIA Act 4 of 2013</p><div style="max-height:340px;overflow-y:auto;font-size:12.5px;color:var(--text2);line-height:1.7"><p style="margin-bottom:10px"><strong style="color:var(--text)">1. Information we collect</strong><br>When you register, we collect your name, church name, conference, country and email address. We also collect your device type and login timestamps to monitor app usage.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">2. How we use your information</strong><br>Your information is used solely to personalise your HymnDesk experience, to track ministry growth and to enable features such as repertoire sharing. Your email address is your login identifier.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">3. Data sharing</strong><br>We do not sell, rent or share your personal information with any third party. Your data is stored securely in a Google Sheets database administered by Serenza Deluxe Atelier.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">4. Your rights under POPIA</strong><br>Under the Protection of Personal Information Act (Act 4 of 2013), you have the right to access, correct or request deletion of your personal data at any time. Contact us at info@serenzadeluxeatelier.co.za.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">5. Data security</strong><br>All passwords are encrypted with SHA-256 before storage. We never store plain-text passwords.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">6. Changes to this policy</strong><br>We may update this policy from time to time. Continued use of the app constitutes acceptance of any revised policy.</p><p><strong style="color:var(--text)">Contact:</strong> info@serenzadeluxeatelier.co.za · hymndesk.co.za</p></div>';
+  var policyHtml='<h2 class="modal-title">Privacy Policy</h2><p class="modal-sub">HymnDesk · Serenza Music Realm · In compliance with POPIA Act 4 of 2013</p><div style="max-height:340px;overflow-y:auto;font-size:12.5px;color:var(--text2);line-height:1.7"><p style="margin-bottom:10px"><strong style="color:var(--text)">1. Information we collect</strong><br>When you register, we collect your name, church name, conference, country and email address. We also collect your device type and login timestamps to monitor app usage.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">2. How we use your information</strong><br>Your information is used solely to personalise your HymnDesk experience, to track ministry growth and to enable features such as repertoire sharing. Your email address is your login identifier.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">3. Data sharing</strong><br>We do not sell, rent or share your personal information with any third party. Your data is stored securely in a Supabase Postgres database administered by Serenza Deluxe Atelier.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">4. Your rights under POPIA</strong><br>Under the Protection of Personal Information Act (Act 4 of 2013), you have the right to access, correct or request deletion of your personal data at any time. Contact us at info@serenzadeluxeatelier.co.za.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">5. Data security</strong><br>All passwords are encrypted with SHA-256 before storage. We never store plain-text passwords.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">6. Changes to this policy</strong><br>We may update this policy from time to time. Continued use of the app constitutes acceptance of any revised policy.</p><p><strong style="color:var(--text)">Contact:</strong> info@serenzadeluxeatelier.co.za · hymndesk.co.za</p></div>';
 
   var termsHtml='<h2 class="modal-title">Terms of Use</h2><p class="modal-sub">HymnDesk · Serenza Music Realm</p><div style="max-height:340px;overflow-y:auto;font-size:12.5px;color:var(--text2);line-height:1.7"><p style="margin-bottom:10px"><strong style="color:var(--text)">1. Acceptance</strong><br>By registering for and using HymnDesk, you agree to these Terms of Use. If you do not agree, please do not use the app.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">2. Use of the app</strong><br>HymnDesk is provided for personal and congregational worship use only. You may not use it for commercial purposes without written permission from Serenza Deluxe Atelier.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">3. Content</strong><br>Hymn lyrics, recordings and notation are provided for worship use. All content remains the intellectual property of their respective rights holders.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">4. User conduct</strong><br>You agree not to misuse the app, attempt to access other users\' accounts, or upload harmful content. Accounts found in violation may be suspended.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">5. Availability</strong><br>We strive for high availability but do not guarantee uninterrupted service. We reserve the right to modify or discontinue the app at any time.</p><p style="margin-bottom:10px"><strong style="color:var(--text)">6. Limitation of liability</strong><br>Serenza Deluxe Atelier is not liable for any loss or damage arising from your use of HymnDesk.</p><p><strong style="color:var(--text)">Contact:</strong> info@serenzadeluxeatelier.co.za · hymndesk.co.za</p></div>';
 
