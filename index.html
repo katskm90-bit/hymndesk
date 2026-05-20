@@ -2448,7 +2448,6 @@ var CloudSync = (function(){
       } catch(e){}
 
       log('pull ok', { reps: cloudReps.length, items: cloudItems.length, favs: cloudFavs.length, history: cloudHistory.length });
-      try { console.log('[CloudSync] pull ok — reps:' + cloudReps.length + ' items:' + cloudItems.length + ' favs:' + cloudFavs.length + ' history:' + cloudHistory.length); } catch(e){}
     }).catch(function(err){
       log('pull failed', err && err.message);
     }).then(function(){
@@ -5174,6 +5173,8 @@ async function gasCall(payload){
   }
 
   // Internal helper: HTTP call to Supabase REST or RPC.
+  // Includes a 20-second timeout — without this, a flaky connection
+  // can leave the UI stuck on "Saving…" or "Signing in…" indefinitely.
   async function _sb(method, path, body, extraHeaders){
     var url = SUPABASE_BASE + '/rest/v1/' + path;
     var headers = {
@@ -5183,18 +5184,30 @@ async function gasCall(payload){
       'Accept':        'application/json'
     };
     if (extraHeaders) for (var k in extraHeaders) headers[k] = extraHeaders[k];
-    var init = { method: method, headers: headers, cache: 'no-store' };
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function(){ controller.abort(); }, 20000);
+    var init = { method: method, headers: headers, cache: 'no-store', signal: controller.signal };
     if (body !== undefined && body !== null) init.body = JSON.stringify(body);
-    var res = await fetch(url, init);
-    if (!res.ok) {
-      var msg = '';
-      try { msg = await res.text(); } catch(e){}
-      throw new Error('Supabase ' + res.status + ': ' + (msg || res.statusText).slice(0, 200));
+    try {
+      var res = await fetch(url, init);
+      if (!res.ok) {
+        var msg = '';
+        try { msg = await res.text(); } catch(e){}
+        throw new Error('Supabase ' + res.status + ': ' + (msg || res.statusText).slice(0, 200));
+      }
+      if (res.status === 204) return null;
+      var ct = res.headers.get('content-type') || '';
+      if (ct.indexOf('application/json') !== -1) return await res.json();
+      return await res.text();
+    } catch(err){
+      // AbortError fires when the timeout trips. Re-throw with a clearer message.
+      if (err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''))) {
+        throw new Error('Request timed out. Please check your connection and try again.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    if (res.status === 204) return null;
-    var ct = res.headers.get('content-type') || '';
-    if (ct.indexOf('application/json') !== -1) return await res.json();
-    return await res.text();
   }
 
   // Internal helper: PostgREST URL filter encoder
@@ -5262,9 +5275,42 @@ async function gasCall(payload){
 
       case 'forgotPassword': {
         if (!payload.email) return { success: false, message: 'Email required.' };
-        var ok = await _sb('POST', 'rpc/request_password_reset', { p_email: payload.email });
-        // Do not reveal whether the email exists — same response either way
-        return { success: true, message: 'If an account exists for that email, a reset code has been generated. Contact the administrator if you do not receive it.' };
+        // Invokes the send-reset-email Edge Function, which generates the
+        // code, stores it in password_reset_codes, and sends the email via
+        // Resend. The function returns a generic success response even if
+        // the email isn't registered, so we don't leak which emails exist.
+        // 20-second timeout to match the rest of the app's network calls.
+        var fpController = new AbortController();
+        var fpTimeout = setTimeout(function(){ fpController.abort(); }, 20000);
+        try {
+          var fnRes = await fetch(SUPABASE_BASE + '/functions/v1/send-reset-email', {
+            method: 'POST',
+            headers: {
+              'apikey':        SUPABASE_ANON_KEY,
+              'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+              'Content-Type':  'application/json',
+              'Accept':        'application/json'
+            },
+            body: JSON.stringify({ email: payload.email }),
+            signal: fpController.signal
+          });
+          clearTimeout(fpTimeout);
+          if (!fnRes.ok) {
+            // The Edge Function should never return non-200 for normal
+            // outcomes — only for malformed input or deployment issues.
+            // Still, return the generic message so the user can recover.
+            return { success: true, message: 'If an account exists for that email, a reset code has been sent. Please check your inbox (and spam folder).' };
+          }
+          var data = await fnRes.json().catch(function(){ return null; });
+          if (data && data.message) return { success: !!data.success, message: data.message };
+          return { success: true, message: 'If an account exists for that email, a reset code has been sent. Please check your inbox (and spam folder).' };
+        } catch(err){
+          clearTimeout(fpTimeout);
+          if (err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''))) {
+            return { success: false, message: 'Request timed out. Please check your connection and try again.' };
+          }
+          return { success: false, message: 'Could not reach the server. Please check your connection and try again.' };
+        }
       }
 
       case 'resetPassword': {
@@ -5903,7 +5949,15 @@ async function loadStats(){
     document.getElementById('stats-loading').style.display = 'none';
     document.getElementById('stats-content').style.display = 'block';
   } catch(e){
-    document.getElementById('stats-loading').innerHTML = '<p style="color:#dc2626;font-size:13px">Failed to load: '+escHtml(e.message)+'</p>';
+    // Show a friendly message with a clear next step. The exact technical
+    // error is logged to the console for the admin to inspect if needed.
+    try { console.warn('loadStats failed:', e); } catch(_e){}
+    var loadingEl = document.getElementById('stats-loading');
+    if (loadingEl) {
+      loadingEl.innerHTML =
+        '<p style="color:var(--text3);font-size:13px;margin-bottom:10px">Could not load analytics — please check your connection.</p>' +
+        '<button class="btn btn-ghost" onclick="loadStats()" style="font-size:12px">Try again</button>';
+    }
   }
 }
 
@@ -6069,11 +6123,11 @@ async function doForgotPassword(){
   try{
     var res = await gasCall({ action:'forgotPassword', email, device:getDeviceInfo() });
     if(res.success){
-      showMsg('forgot-msg', 'A reset code has been sent to '+email+'. Check your inbox (and spam folder).', 'ok');
+      showMsg('forgot-msg', res.message || 'If an account exists for that email, a reset code has been sent. Please check your inbox (and spam folder).', 'ok');
       document.getElementById('reset-code-section').style.display = 'block';
       btn.textContent = 'Resend Code';
     } else {
-      showMsg('forgot-msg', res.message || 'No account found with that email address.');
+      showMsg('forgot-msg', res.message || 'Could not send reset code. Please try again.');
     }
   } catch(e){
     showMsg('forgot-msg','Connection error — please check your internet and try again.');
@@ -7764,19 +7818,26 @@ function openAdEnquiry(slideIndex){
     var msg=(overlay.querySelector('#ad-enq-msg').value||'').trim();
     var status=overlay.querySelector('#ad-enq-status');
     if(!name||!contact){ status.style.display='block';status.style.background='#fef2f2';status.style.border='1px solid #fecaca';status.style.color='#dc2626';status.textContent='Please fill in your name and contact details.'; return; }
-    this.disabled=true; this.textContent='Sending…';
+    var sendBtn = this;
+    var sentOk = false;
+    sendBtn.disabled=true; sendBtn.textContent='Sending…';
     try{
-      // Store enquiry locally for admin — also send to GAS
+      // Store enquiry locally for admin — also send to Supabase
       var enquiries = JSON.parse(localStorage.getItem('lh_ad_enquiries')||'[]');
       var enquiry = {id:uid(),slideHeadline:sl.headline,name,contact,msg,date:Date.now(),read:false};
       enquiries.unshift(enquiry);
       localStorage.setItem('lh_ad_enquiries',JSON.stringify(enquiries.slice(0,200)));
       await gasCall({ action:'adEnquiry', slideHeadline:sl.headline, name, contact, msg, userId:currentUser?currentUser.id:'anonymous' });
       status.style.display='block';status.style.background='#f0fdf4';status.style.border='1px solid #bbf7d0';status.style.color='#166534';status.textContent='Enquiry sent. The admin will contact you soon.';
-      this.textContent='Sent ✓';
+      sendBtn.textContent='Sent ✓';
+      sentOk = true;
     } catch(e){
       status.style.display='block';status.style.background='#fef2f2';status.style.border='1px solid #fecaca';status.style.color='#dc2626';status.textContent='Could not send — saved locally for now.';
-      this.disabled=false;this.textContent='Send Enquiry';
+    } finally {
+      // Always re-enable the button so the user is never stuck. The only
+      // exception is a successful send — in that case we leave it as "Sent ✓"
+      // and disabled, signalling the action completed.
+      if (!sentOk) { sendBtn.disabled=false; sendBtn.textContent='Send Enquiry'; }
     }
   });
 }
