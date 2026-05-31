@@ -60187,6 +60187,17 @@
       "isAd": true,
       "bgPosX": 50,
       "bgPosY": 63
+    },
+    {
+      "headline": "MTN FIBRE DEALS",
+      "sub": "",
+      "img": "https://onlinecms.mtn.co.za/sites/default/files/superflexdesktop1920x840_1.png",
+      "link": "https://www.mtn.co.za/shop/deals/plans/data-only/uncapped-home-internet",
+      "btnText": "GET NOW",
+      "btnLink": "https://www.mtn.co.za/shop/deals/plans/data-only/uncapped-home-internet",
+      "isAd": false,
+      "bgPosX": 36,
+      "bgPosY": 50
     }
   ],
   "donateCard": {
@@ -60215,5 +60226,5 @@
     }
   ],
   "broadcast": null,
-  "publishedAt": 1779211623861
+  "publishedAt": 1780242399494
 }
