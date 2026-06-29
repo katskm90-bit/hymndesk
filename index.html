@@ -4449,8 +4449,26 @@ async function syncHymnsFromGithub(){
     if (cachedEtag) hymnsFetchHeaders['If-None-Match'] = cachedEtag;
     const res=await fetch(HYMNS_URL, { headers: hymnsFetchHeaders });
     if(res.status===304){
-      // Not modified — nothing to update, clear the banner and return
-      showSyncBanner(null);
+      // Not modified — cached copy is current.
+      // If hymns are already loaded in memory, nothing more to do.
+      if(hymns.length){
+        showSyncBanner(null);
+        return;
+      }
+      // hymns array is empty despite a 304 (e.g. first load after SW cache cleared).
+      // Force a fresh unconditional fetch to recover gracefully.
+      localStorage.removeItem('lh_hymns_etag');
+      const freshRes = await fetch(HYMNS_URL, { cache: 'no-store' });
+      if(!freshRes.ok) throw new Error('HTTP '+freshRes.status);
+      const freshEtag = freshRes.headers.get('ETag');
+      if(freshEtag) localStorage.setItem('lh_hymns_etag', freshEtag);
+      const freshData = await freshRes.json();
+      const remoteHymns = freshData.hymns || [];
+      if(remoteHymns.length) hymns = remoteHymns;
+      renderBookGrid();
+      updateHymnCount();
+      showSyncBanner('Library loaded — '+hymns.length+' hymns');
+      setTimeout(()=>showSyncBanner(null),3000);
       return;
     }
     if(!res.ok)throw new Error('HTTP '+res.status);
@@ -4524,8 +4542,12 @@ async function syncHymnsFromGithub(){
     flushUsageQueue();
     setTimeout(()=>showSyncBanner(null),4000);
   }catch(e){
-    showSyncBanner('Offline — using saved library');
-    setTimeout(()=>showSyncBanner(null),3000);
+    if(!hymns.length){
+      showSyncBanner('Could not load hymn library. Check your connection and refresh.');
+    } else {
+      showSyncBanner('Offline — using saved library');
+      setTimeout(()=>showSyncBanner(null),3000);
+    }
   }
 }
 
