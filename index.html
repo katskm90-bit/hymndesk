@@ -925,7 +925,7 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
   </div>
 </div>
 
-<div class="modal-overlay" id="del-modal">
+<div class="modal-overlay" id="del-modal" data-no-dismiss="true">
   <div class="modal-box narrow" style="text-align:center">
     <div class="del-icon-wrap"><svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></div>
     <h2 class="modal-title">Delete hymn?</h2>
@@ -934,7 +934,7 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
   </div>
 </div>
 
-<div class="modal-overlay" id="del-rep-modal" style="z-index:280">
+<div class="modal-overlay" id="del-rep-modal" style="z-index:280" data-no-dismiss="true">
   <div class="modal-box narrow" style="text-align:center">
     <div class="del-icon-wrap"><svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></div>
     <h2 class="modal-title">Delete repertoire?</h2>
@@ -3029,6 +3029,22 @@ function $i(id){return document.getElementById(id)||_noop;}
 function on(id,evt,fn){var el=document.getElementById(id);if(el)el.addEventListener(evt,fn);}
 function openModal(id){var el=document.getElementById(id);if(el){el.classList.add('open');el.scrollTop=0;var box=el.querySelector('.modal-box');if(box)box.scrollTop=0;}}
 function closeModal(id){var el=document.getElementById(id);if(el)el.classList.remove('open');}
+
+// Click outside modal box to close — works for every .modal-overlay.
+// Modals that must NOT close on backdrop click (e.g. destructive confirmations)
+// can set data-no-dismiss="true" on the overlay element.
+document.addEventListener('click', function(e){
+  if (!e.target) return;
+  var overlay = e.target;
+  if (!overlay.classList || !overlay.classList.contains('modal-overlay')) return;
+  if (overlay.getAttribute('data-no-dismiss') === 'true') return;
+  if (!overlay.classList.contains('open')) return;
+  // If pitch pipe modal, also stop notes
+  if (overlay.id === 'pitch-pipe-modal' && typeof stopAllPitchNotes === 'function') {
+    stopAllPitchNotes();
+  }
+  overlay.classList.remove('open');
+});
 function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function toast(msg,type='info'){
   const el=document.createElement('div');el.className='toast toast-'+type;
@@ -3710,6 +3726,18 @@ function _doResume(state){
   }
 }
 function projectRepItem(item){
+  // Apply per-item slide duration if set, otherwise leave the global timer as-is.
+  // This lets each hymn, segment, or announcement have its own pace.
+  if (item.slideDuration && autoAdvActive) {
+    autoAdvInterval = item.slideDuration;
+    clearInterval(autoAdvTimer);
+    startAutoAdv();
+  } else if (item.slideDuration && !autoAdvActive) {
+    // Item has a duration set — activate auto-advance for this item automatically.
+    autoAdvInterval = item.slideDuration;
+    autoAdvActive = true;
+    startAutoAdv();
+  }
   if(item.type==='divider')showDivider(item);
   else if(item.type==='segment')showSegmentSlide(item);
   else if(item.type==='announcement')showAnnouncementSlide(item);
@@ -3886,16 +3914,20 @@ function renderRepDetail(r){
  </div>`;
     }
     if(item.itemType==='segment'){
+      const segDur = item.slideDuration || 0;
+      const segDurLabel = segDur ? fmtTime(segDur) : '';
       return`<div class="rep-item-row segment-row" draggable="true" data-item-id="${item.id}">
  <span class="rep-drag-handle" title="Drag to reorder"><svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
  <div class="rep-item-num segment-num">${idx+1}</div>
  <div class="rep-item-info">
  <div class="rep-item-title"><span class="segment-tag">Segment</span>${escHtml(item.segName)}</div>
  ${item.segNote?'<div class="rep-item-meta"><span class="rep-item-sub">'+escHtml(item.segNote)+'</span></div>':''}
+ ${segDurLabel?'<div class="rep-item-meta"><span class="rep-item-sub" style="color:#10b981;font-weight:600">⏱ '+segDurLabel+'/slide</span></div>':''}
  </div>
  <div class="rep-item-controls">
  <button class="rep-order-btn" data-id="${item.id}" data-dir="-1" title="Move up"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg></button>
  <button class="rep-order-btn" data-id="${item.id}" data-dir="1" title="Move down"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg></button>
+ <button class="rep-cfg-btn rep-timer-btn" data-timer-id="${item.id}" title="Set auto-advance time for this segment" style="${segDur?'background:#e6faf5;border-color:#6ee7c7;color:#065f46':''}">⏱${segDurLabel?' '+segDurLabel:''}</button>
  <button class="rep-cfg-btn" data-seg-edit="${item.id}">Edit</button>
  <button class="rep-remove" data-id="${item.id}"><svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
  </div>
@@ -3903,6 +3935,8 @@ function renderRepDetail(r){
     }
     const h=hymns.find(x=>x.id===item.hymnId);if(!h)return'';
     const hasRepeats=Object.values(item.repeatConfig||{}).some(v=>v>1);
+    const itemDur = item.slideDuration || 0;
+    const durLabel = itemDur ? fmtTime(itemDur) : '';
     return`<div class="rep-item-row hymn-row" draggable="true" data-item-id="${item.id}">
  <span class="rep-drag-handle" title="Drag to reorder"><svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
  <div class="rep-item-num hymn-num">${idx+1}</div>
@@ -3913,12 +3947,14 @@ function renderRepDetail(r){
  <span class="rep-item-sub">${escHtml(h.book)} #${h.number}</span>
  ${item.key?'<span class="rep-item-sub pp-key-trigger" data-key="'+item.key+'" style="cursor:pointer;text-decoration:underline dotted" title="Tap to hear this key on the pitch pipe">Key: '+item.key+'</span>':''}
  ${hasRepeats?'<span class="rep-item-sub" style="color:#C05A08">Repeats set</span>':''}
+ ${durLabel?'<span class="rep-item-sub" style="color:#10b981;font-weight:600">⏱ '+durLabel+'/slide</span>':''}
  </div>
  </div>
  <div class="rep-item-controls">
  <button class="rep-order-btn" data-id="${item.id}" data-dir="-1" title="Move up"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg></button>
  <button class="rep-order-btn" data-id="${item.id}" data-dir="1" title="Move down"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg></button>
  <button class="rep-cfg-btn" data-id="${item.id}">Repeats</button>
+ <button class="rep-cfg-btn rep-timer-btn" data-timer-id="${item.id}" title="Set auto-advance time for this item's slides" style="${itemDur?'background:#e6faf5;border-color:#6ee7c7;color:#065f46':''}">⏱${durLabel?' '+durLabel:''}</button>
  <select class="key-select" data-id="${item.id}"><option value="">Key</option>${KEYS.map(k=>`<option value="${k}"${item.key===k?' selected':''}>${k}</option>`).join('')}</select>
  <button class="rep-remove" data-id="${item.id}"><svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
  </div>
@@ -3934,6 +3970,7 @@ function renderRepDetail(r){
   }));
   $i('rd-items').querySelectorAll('.key-select').forEach(s=>s.addEventListener('change',()=>{const item=repItems.find(i=>i.id===s.dataset.id);if(item){item.key=s.value;save();}}));
   $i('rd-items').querySelectorAll('.rep-cfg-btn[data-id]').forEach(b=>b.addEventListener('click',()=>openRepeatConfig(b.dataset.id)));
+  $i('rd-items').querySelectorAll('.rep-timer-btn[data-timer-id]').forEach(b=>b.addEventListener('click',()=>openItemTimerModal(b.dataset.timerId, r)));
   $i('rd-items').querySelectorAll('[data-seg-edit]').forEach(b=>b.addEventListener('click',()=>{const item=repItems.find(i=>i.id===b.dataset.segEdit);if(item)openSegmentModal(item);}));
   $i('rd-items').querySelectorAll('[data-ann-edit]').forEach(b=>b.addEventListener('click',()=>{const item=repItems.find(i=>i.id===b.dataset.annEdit);if(item)openAnnouncementModal(item);}));
   $i('rd-items').querySelectorAll('.rep-order-btn').forEach(b=>b.addEventListener('click',()=>moveRepItem(b.dataset.id,parseInt(b.dataset.dir))));
@@ -4057,9 +4094,9 @@ function startRepProjection(){
   if(!items.length){toast('No items in this repertoire','error');return;}
   repProjection=[];
   items.forEach(item=>{
-    if(item.itemType==='announcement'){repProjection.push({type:'announcement',annHeadline:item.annHeadline,annBody:item.annBody||''});}
-    else if(item.itemType==='segment'){repProjection.push({type:'segment',name:item.segName,note:item.segNote||''});}
-    else{const h=hymns.find(x=>x.id===item.hymnId);if(h){repProjection.push({type:'divider',title:h.title,book:h.book,number:h.number,key:item.key||'Not set',writer:h.writer||''});repProjection.push({...h,_repeatConfig:item.repeatConfig||{}});}}
+    if(item.itemType==='announcement'){repProjection.push({type:'announcement',annHeadline:item.annHeadline,annBody:item.annBody||'',slideDuration:item.slideDuration||0});}
+    else if(item.itemType==='segment'){repProjection.push({type:'segment',name:item.segName,note:item.segNote||'',slideDuration:item.slideDuration||0});}
+    else{const h=hymns.find(x=>x.id===item.hymnId);if(h){repProjection.push({type:'divider',title:h.title,book:h.book,number:h.number,key:item.key||'Not set',writer:h.writer||'',slideDuration:item.slideDuration||0});repProjection.push({...h,_repeatConfig:item.repeatConfig||{},slideDuration:item.slideDuration||0});}}
   });
   if(!repProjection.length){toast('No valid items','error');return;}
   fromRep=true;repProjIndex=0;
@@ -7802,6 +7839,82 @@ function applyAutoTimer(){
   toast('Auto-advance: '+fmtTime(v)+' per slide','info');
 }
 function openReadingAutoModal(){ openAutoTimerModal(); }
+
+// Per-item slide duration modal — lets the user set a custom auto-advance
+// duration for each individual repertoire item independently of the global timer.
+function openItemTimerModal(itemId, rep){
+  var item = repItems.find(function(i){ return i.id === itemId; });
+  if (!item) return;
+  var existing = document.getElementById('item-timer-modal');
+  if (existing) existing.remove();
+
+  var curVal = item.slideDuration || 0;
+  var itemLabel = item.itemType === 'segment' ? item.segName
+    : item.itemType === 'announcement' ? item.annHeadline
+    : (hymns.find(function(h){ return h.id === item.hymnId; }) || {}).title || 'Item';
+
+  var presetsHtml = [0,15,30,45,60,90,120,180,300].map(function(v){
+    return '<button data-val="'+v+'" style="padding:6px 4px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:11px;font-weight:600;cursor:pointer'+(v===curVal?';background:#FFF0E6;border-color:#E8650A;color:#C05A08':'')+'">'+(v===0?'Off':fmtTime(v))+'</button>';
+  }).join('');
+
+  var overlay = document.createElement('div');
+  overlay.id = 'item-timer-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.72);backdrop-filter:blur(4px);z-index:460;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:22px;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3)';
+  box.innerHTML =
+    '<h3 style="font-size:16px;color:var(--text);margin-bottom:4px;font-weight:700">Slide timer</h3>'
+   +'<p style="font-size:12px;color:var(--text3);margin-bottom:6px;line-height:1.5">Set how long each slide stays on screen for <strong style="color:var(--text)">'+escHtml(itemLabel)+'</strong>. Overrides the global timer for this item only.</p>'
+   +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
+   +'<input type="range" id="it-slider" min="0" max="600" step="5" value="'+curVal+'" style="flex:1;accent-color:#E8650A">'
+   +'<span id="it-display" style="font-size:20px;font-weight:700;color:#E8650A;min-width:52px;text-align:right">'+(curVal?fmtTime(curVal):'Off')+'</span>'
+   +'</div>'
+   +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:10px" id="it-presets">'+presetsHtml+'</div>'
+   +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:9px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">'
+   +'<label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;flex-shrink:0">Custom</label>'
+   +'<input type="number" id="it-custom" min="0" max="3600" step="1" placeholder="e.g. 45" value="'+(curVal||'')+'" style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-weight:600;outline:none;text-align:center">'
+   +'<span style="font-size:12px;color:var(--text3);font-weight:500;flex-shrink:0">seconds</span>'
+   +'</div>'
+   +'<div style="display:flex;gap:8px">'
+   +'<button id="it-cancel" style="flex:1;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text2);font-weight:600;cursor:pointer;font-size:13px">Cancel</button>'
+   +'<button id="it-apply" style="flex:2;padding:10px;background:linear-gradient(135deg,#E8650A,#d45a08);border:none;border-radius:9px;color:#fff;font-weight:600;cursor:pointer;font-size:13px">Apply</button>'
+   +'</div>';
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  box.querySelector('#it-slider').addEventListener('input', function(){
+    var v = parseInt(this.value)||0;
+    document.getElementById('it-display').textContent = v ? fmtTime(v) : 'Off';
+    document.getElementById('it-custom').value = v || '';
+  });
+  box.querySelector('#it-custom').addEventListener('input', function(){
+    var v = parseInt(this.value)||0;
+    document.getElementById('it-slider').value = Math.min(v, 600);
+    document.getElementById('it-display').textContent = v ? fmtTime(v) : 'Off';
+  });
+  box.querySelectorAll('#it-presets button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var v = parseInt(btn.dataset.val)||0;
+      document.getElementById('it-slider').value = Math.min(v, 600);
+      document.getElementById('it-custom').value = v || '';
+      document.getElementById('it-display').textContent = v ? fmtTime(v) : 'Off';
+    });
+  });
+  box.querySelector('#it-cancel').addEventListener('click', function(){ overlay.remove(); });
+  box.querySelector('#it-apply').addEventListener('click', function(){
+    var customEl = document.getElementById('it-custom');
+    var v = customEl && customEl.value !== '' ? parseInt(customEl.value)||0 : parseInt(document.getElementById('it-slider').value)||0;
+    if (v < 0) v = 0;
+    item.slideDuration = v || undefined; // remove key if 0 to keep data clean
+    save();
+    overlay.remove();
+    if (rep) renderRepDetail(rep);
+    toast(v ? 'Timer set: '+fmtTime(v)+' per slide for this item' : 'Item timer cleared', 'info');
+  });
+  overlay.addEventListener('click', function(e){ if (e.target === overlay) overlay.remove(); });
+}
 var readingAutoTimer2=null;
 function startReadingAutoAdv(){
   clearInterval(readingAutoTimer2);
@@ -8816,14 +8929,15 @@ renderSlide = function() {
 // ═══════════════════════════════════════════════════════════════════════════
 // PITCH PIPE — reference note player for rehearsals (Web Audio API)
 // ═══════════════════════════════════════════════════════════════════════════
-// Pure sine-wave oscillator per note, equal temperament at A4=440Hz.
-// Sustains while the user holds the button, releases on pointer release.
+// Pitch pipe audio engine — harmonic synthesis, A4 = 440 Hz equal temperament.
+// Uses additive synthesis (multiple detuned oscillators + harmonics) to produce
+// a warm organ/piano-like tone rather than a thin pure sine wave.
+// Sustains while the user holds the button, releases smoothly on pointer release.
 // No external audio files — works fully offline.
 var _ppAudioCtx = null;
-var _ppActive = {}; // note name -> { oscillator, gain }
+var _ppActive = {}; // note name -> { nodes: [...], masterGain }
 var _ppCurrentOctave = 4;
 
-// Semitones above C4, mapped to frequency in Hz
 var _PP_NOTES = [
   { name: 'C',  label: 'C',  semitone: 0,  sharp: false },
   { name: 'C#', label: 'C♯', semitone: 1,  sharp: true  },
@@ -8842,8 +8956,6 @@ var _PP_NOTES = [
 function _ppFrequency(noteName, octave) {
   var n = _PP_NOTES.find(function(x){ return x.name === noteName; });
   if (!n) return 440;
-  // A4 = 440 Hz is 9 semitones above C4. A is at octave 4 in standard notation.
-  // We calculate semitones from A4.
   var semitonesFromA4 = (octave - 4) * 12 + (n.semitone - 9);
   return 440 * Math.pow(2, semitonesFromA4 / 12);
 }
@@ -8854,7 +8966,6 @@ function _ppEnsureAudioCtx() {
     if (!AudioCtx) return null;
     _ppAudioCtx = new AudioCtx();
   }
-  // Safari/iOS may suspend the context until user interacts
   if (_ppAudioCtx.state === 'suspended' && _ppAudioCtx.resume) {
     _ppAudioCtx.resume().catch(function(){});
   }
@@ -8864,20 +8975,64 @@ function _ppEnsureAudioCtx() {
 function playPitchNote(noteName, octave) {
   var ctx = _ppEnsureAudioCtx();
   if (!ctx) return;
-  stopPitchNote(noteName); // one voice per note
+  stopPitchNote(noteName);
+
   var oct = octave || _ppCurrentOctave;
   var freq = _ppFrequency(noteName, oct);
-  var osc = ctx.createOscillator();
-  var gain = ctx.createGain();
-  osc.type = 'sine';
-  osc.frequency.value = freq;
-  // Short attack to avoid click
-  gain.gain.setValueAtTime(0, ctx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.02);
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start();
-  _ppActive[noteName] = { oscillator: osc, gain: gain };
+  var now = ctx.currentTime;
+
+  // Master gain node — all oscillators feed into this
+  var masterGain = ctx.createGain();
+
+  // Soft compressor to prevent clipping when multiple harmonics sum
+  var compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = -18;
+  compressor.knee.value = 10;
+  compressor.ratio.value = 4;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.15;
+
+  masterGain.connect(compressor);
+  compressor.connect(ctx.destination);
+
+  // ADSR envelope — piano-like attack, slow organ sustain
+  masterGain.gain.setValueAtTime(0, now);
+  masterGain.gain.linearRampToValueAtTime(0.55, now + 0.012);  // fast attack
+  masterGain.gain.exponentialRampToValueAtTime(0.38, now + 0.08); // slight decay
+  masterGain.gain.setValueAtTime(0.38, now + 0.08);             // sustain level
+
+  // Harmonic series — fundamental + overtones with natural amplitudes.
+  // This is what makes a note sound like a real instrument rather than a beep.
+  // Partials: [multiplier, amplitude, type, detune_cents]
+  var partials = [
+    [1.0,   0.50, 'sine',     0  ],  // fundamental
+    [2.0,   0.22, 'sine',     0  ],  // octave (2nd harmonic)
+    [3.0,   0.10, 'sine',     0  ],  // fifth above octave (3rd)
+    [4.0,   0.07, 'sine',     0  ],  // two octaves (4th)
+    [5.0,   0.04, 'sine',     0  ],  // major third above (5th)
+    [6.0,   0.03, 'sine',     0  ],  // fifth above second octave (6th)
+    [1.0,   0.06, 'sine',     1.5],  // unison slightly detuned (warmth/chorus)
+    [1.0,   0.06, 'sine',    -1.5],  // unison slightly detuned other side
+    [2.0,   0.04, 'triangle', 0  ],  // sub-octave triangle (body/weight)
+  ];
+
+  var nodes = [masterGain, compressor];
+
+  partials.forEach(function(p) {
+    var mult = p[0], amp = p[1], type = p[2], detune = p[3];
+    var osc = ctx.createOscillator();
+    var oscGain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq * mult;
+    osc.detune.value = detune;
+    oscGain.gain.value = amp;
+    osc.connect(oscGain);
+    oscGain.connect(masterGain);
+    osc.start(now);
+    nodes.push(osc, oscGain);
+  });
+
+  _ppActive[noteName] = { nodes: nodes, masterGain: masterGain };
 }
 
 function stopPitchNote(noteName) {
@@ -8885,10 +9040,15 @@ function stopPitchNote(noteName) {
   if (!a || !_ppAudioCtx) return;
   var t = _ppAudioCtx.currentTime;
   try {
-    a.gain.gain.cancelScheduledValues(t);
-    a.gain.gain.setValueAtTime(a.gain.gain.value, t);
-    a.gain.gain.linearRampToValueAtTime(0, t + 0.08);
-    a.oscillator.stop(t + 0.1);
+    a.masterGain.gain.cancelScheduledValues(t);
+    a.masterGain.gain.setValueAtTime(a.masterGain.gain.value, t);
+    a.masterGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    // Stop all oscillators after the release tail
+    a.nodes.forEach(function(node) {
+      if (node && typeof node.stop === 'function') {
+        try { node.stop(t + 0.22); } catch(e){}
+      }
+    });
   } catch(e){}
   delete _ppActive[noteName];
 }
@@ -9181,10 +9341,27 @@ renderHeaderYtLink();
     if (p) p.style.display = 'none';
   });
 
-  // Pitch pipe modal close
-  bind('close-pitch-pipe-modal', 'click', function(){
-    closeModal('pitch-pipe-modal');
-    stopAllPitchNotes();
+  // Pitch pipe modal close — bound via DOMContentLoaded because the modal HTML
+  // sits after </body> in the document and is not yet in the DOM when
+  // wireStaticHandlers() runs. Using a delegated listener on the overlay itself
+  // so it works regardless of parse order.
+  document.addEventListener('DOMContentLoaded', function(){
+    var ppOverlay = document.getElementById('pitch-pipe-modal');
+    if (ppOverlay) {
+      // X button
+      var closeBtn = document.getElementById('close-pitch-pipe-modal');
+      if (closeBtn) closeBtn.addEventListener('click', function(){
+        closeModal('pitch-pipe-modal');
+        if (typeof stopAllPitchNotes === 'function') stopAllPitchNotes();
+      });
+      // Click outside the modal box to close
+      ppOverlay.addEventListener('click', function(e){
+        if (e.target === ppOverlay) {
+          closeModal('pitch-pipe-modal');
+          if (typeof stopAllPitchNotes === 'function') stopAllPitchNotes();
+        }
+      });
+    }
   });
 })();
 
@@ -9218,6 +9395,7 @@ window.applyProjTheme      = applyProjTheme;
 window.presenterJumpTo     = presenterJumpTo;
 window.presenterJumpToRepItem = presenterJumpToRepItem;
 window.stopAllPitchNotes   = stopAllPitchNotes;
+window.openItemTimerModal  = openItemTimerModal;
 window.toast               = toast;
 
 } // end of if (!IS_PROJECTOR_WINDOW) — main app block
