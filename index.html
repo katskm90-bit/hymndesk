@@ -1426,7 +1426,7 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
 </div>
 
 <!-- ── AUTH MODAL ─────────────────────────────────────────────────────────── -->
-<div class="modal-overlay" id="auth-modal">
+<div class="modal-overlay" id="auth-modal" data-no-dismiss="true">
   <div class="modal-box narrow">
     <!-- auth-close removed: users must sign in to use the app -->
 
@@ -2069,7 +2069,11 @@ var CloudSync = (function(){
   var log = function(){ try { console.log.apply(console, ['[CloudSync v3]'].concat([].slice.call(arguments))); } catch(e){} };
 
   function isConfigured(){
-    return !!(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 20);
+    if (!(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 20)) return false;
+    // Sync needs the signed-in user's pass. Without a valid one the database
+    // refuses every row, so there is no point queueing or sending anything.
+    if (typeof isAuthTokenValid === 'function' && !isAuthTokenValid()) return false;
+    return true;
   }
   function getUserId(){
     try {
@@ -2084,9 +2088,15 @@ var CloudSync = (function(){
   // ── HTTP helper — minimal, no retries built in (retries handled at op level) ─
   function rpc(method, path, body, extraHeaders){
     var url = apiBase + '/rest/v1/' + path;
+    // CloudSync only ever touches the signed-in user's own rows, so it always
+    // needs the pass. If there is no valid pass the request would be refused
+    // by the database anyway — see the guard in isConfigured().
+    var bearer = (typeof isAuthTokenValid === 'function' && isAuthTokenValid())
+      ? getAuthToken()
+      : SUPABASE_ANON_KEY;
     var headers = {
       'apikey': SUPABASE_ANON_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + bearer,
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     };
@@ -5188,7 +5198,53 @@ function _clearSessionCookie(){
   try { document.cookie = 'hd_session=;path=/;max-age=0;SameSite=Lax;Secure'; } catch(e){}
 }
 
+// ── AUTH TOKEN STORE ────────────────────────────────────────────────────────
+// When a user signs in, the database hands back a signed pass (a JWT) that
+// names that one user. Every request afterwards carries it, and the database
+// uses it to decide which rows the request may touch.
+//
+// Without a pass the public key can do almost nothing, so this store is what
+// makes normal use of the app work at all.
+var _authToken = null;
+
+function setAuthToken(token){
+  _authToken = token || null;
+  try {
+    if (_authToken) localStorage.setItem('hd_token', _authToken);
+    else            localStorage.removeItem('hd_token');
+  } catch(e){}
+}
+
+function getAuthToken(){
+  if (_authToken) return _authToken;
+  try { _authToken = localStorage.getItem('hd_token') || null; } catch(e){ _authToken = null; }
+  return _authToken;
+}
+
+// Is the stored pass still valid? Read the expiry out of the middle segment.
+// Treats anything unreadable as expired so we fail closed, never open.
+function isAuthTokenValid(){
+  var t = getAuthToken();
+  if (!t) return false;
+  try {
+    var parts = t.split('.');
+    if (parts.length !== 3) return false;
+    var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    var claims = JSON.parse(atob(b64));
+    if (!claims.exp) return false;
+    // 60-second margin so a pass about to lapse is treated as already lapsed
+    return (claims.exp * 1000) > (Date.now() + 60000);
+  } catch(e){ return false; }
+}
+
 function saveUserSession(user){
+  // The pass travels with the user object from login/register. Store it
+  // separately and strip it out before the user object is written down.
+  if (user && user.token) {
+    setAuthToken(user.token);
+    delete user.token;
+  }
   var json = JSON.stringify(user);
   try { localStorage.setItem('hd_user', json); } catch(e){}
   _setSessionCookie(json);
@@ -5196,30 +5252,43 @@ function saveUserSession(user){
 }
 function clearUserSession(){
   try { localStorage.removeItem('hd_user'); } catch(e){}
+  setAuthToken(null);
   _clearSessionCookie();
   currentUser = null;
 }
 function loadUserSession(){
-  // Try localStorage first (fast, normal case)
+  // A stored user is only usable if the pass alongside it is still valid.
+  // If the pass has lapsed, treat the session as ended and make the person
+  // sign in again — otherwise the app would look signed in while every
+  // request quietly failed.
+  var restored = null;
   try {
     var stored = localStorage.getItem('hd_user');
     if (stored) {
-      currentUser = JSON.parse(stored);
-      // Also refresh the cookie so it doesn't drift out of sync if it was missing
+      restored = JSON.parse(stored);
       _setSessionCookie(stored);
-      return;
     }
   } catch(e){}
-  // Fall back to cookie if localStorage was wiped (PWA eviction, cache clear, etc.)
-  try {
-    var cookieValue = _getSessionCookie();
-    if (cookieValue) {
-      currentUser = JSON.parse(cookieValue);
-      // Restore localStorage so subsequent loads use the fast path
-      try { localStorage.setItem('hd_user', cookieValue); } catch(e){}
-      return;
-    }
-  } catch(e){}
+  if (!restored) {
+    try {
+      var cookieValue = _getSessionCookie();
+      if (cookieValue) {
+        restored = JSON.parse(cookieValue);
+        try { localStorage.setItem('hd_user', cookieValue); } catch(e){}
+      }
+    } catch(e){}
+  }
+  if (restored && isAuthTokenValid()) {
+    currentUser = restored;
+    return;
+  }
+  // No usable session
+  if (restored) {
+    // We had a user on file but the pass has lapsed — clear it down cleanly
+    try { localStorage.removeItem('hd_user'); } catch(e){}
+    setAuthToken(null);
+    _clearSessionCookie();
+  }
   currentUser = null;
 }
 
@@ -5256,9 +5325,15 @@ async function gasCall(payload){
   // can leave the UI stuck on "Saving…" or "Signing in…" indefinitely.
   async function _sb(method, path, body, extraHeaders){
     var url = SUPABASE_BASE + '/rest/v1/' + path;
+    // Send the signed-in user's pass when we have a valid one, otherwise fall
+    // back to the public key. The public key can only log in, register, and
+    // record an app open — everything else needs a pass.
+    var bearer = (typeof isAuthTokenValid === 'function' && isAuthTokenValid())
+      ? getAuthToken()
+      : SUPABASE_ANON_KEY;
     var headers = {
       'apikey':        SUPABASE_ANON_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + bearer,
       'Content-Type':  'application/json',
       'Accept':        'application/json'
     };
@@ -5456,7 +5531,7 @@ async function gasCall(payload){
         return { success: true };
       }
       case 'getUserFeedback': {
-        var rows = await _sb('GET', 'user_feedback?select=*&order=created_at.desc&limit=500');
+        var rows = await _sb('POST', 'rpc/get_admin_feedback', {});
         // Translate rows back to the legacy shape the admin UI expects
         var items = (rows || []).map(function(r){
           return {
@@ -5485,7 +5560,7 @@ async function gasCall(payload){
         return { success: true };
       }
       case 'getRatings': {
-        var rows = await _sb('GET', 'app_ratings?select=*&order=created_at.desc&limit=500');
+        var rows = await _sb('POST', 'rpc/get_admin_ratings', {});
         var items = (rows || []).map(function(r){
           return {
             id:        r.id,
@@ -5512,7 +5587,7 @@ async function gasCall(payload){
         return { success: true };
       }
       case 'getAdEnquiries': {
-        var rows = await _sb('GET', 'ad_enquiries?select=*&order=created_at.desc&limit=500');
+        var rows = await _sb('POST', 'rpc/get_admin_enquiries', {});
         var items = (rows || []).map(function(r){
           return {
             id:             r.id,
@@ -5572,7 +5647,7 @@ async function gasCall(payload){
           throw new Error('Could not load users: ' + err.message);
         }
         try {
-          loginsRows = await _sb('GET', 'app_logins?select=user_id,name,email,timestamp&order=timestamp.desc&limit=2000');
+          loginsRows = await _sb('POST', 'rpc/get_admin_logins', {});
         } catch(err){
           // If logins fail, just continue with empty — better partial stats than no stats
           loginsRows = [];
@@ -5739,6 +5814,7 @@ async function doLogin(){
       saveUserSession(res.user);
       renderUserBtn();
       closeModal('auth-modal');
+      applyAuthGate();          // lifts the cover now that we are signed in
       recordUsageEvent('login');
       try { if (typeof CloudSync !== 'undefined' && CloudSync.onSignIn) CloudSync.onSignIn(); } catch(e){}
       toast('Welcome back, '+(res.user.name.split(' ')[0])+'!','success');
@@ -5773,6 +5849,7 @@ async function doRegister(){
       saveUserSession(res.user);
       renderUserBtn();
       closeModal('auth-modal');
+      applyAuthGate();          // lifts the cover now that we are signed in
       try { if (typeof CloudSync !== 'undefined' && CloudSync.onSignIn) CloudSync.onSignIn(); } catch(e){}
       toast('Welcome to HymnDesk, '+name+'!','success');
     } else {
@@ -5794,8 +5871,8 @@ function doLogout(){
   var sb = document.getElementById('stats-btn');
   if(sb) sb.remove();
   toast('Signed out successfully.','info');
-  // Re-enforce auth gate immediately
-  setTimeout(function(){ openAuthModal(); }, 300);
+  // Put the cover and login panel straight back up — no delay, no gap
+  applyAuthGate();
 }
 
 // ── ADMIN STATS ───────────────────────────────────────────────────────────────
@@ -6262,10 +6339,64 @@ async function doResetPassword(){
 // ── FIRST LAUNCH PROMPT ────────────────────────────────────────────────────────
 // Show sign-in modal automatically on first install/visit, but only once.
 // Never shown again once a session exists or the user dismisses it.
+// ── SIGN-UP GATE ────────────────────────────────────────────────────────────
+// Nobody reaches the hymn library without an account. This matters for two
+// reasons: the sync features need to know whose data is whose, and the
+// audience figures shown to advertisers have to be real.
+//
+// The gate closes off every route in:
+//   * The login panel opens straight away, with no window of visible content.
+//   * Clicking the dark area around it does nothing (data-no-dismiss).
+//   * There is no close button on the panel while signed out.
+//   * closeModal cannot dismiss it while signed out, whatever calls it.
+//   * A cover sits over the page so nothing behind can be read or clicked.
 function checkFirstLaunch(){
-  // Always enforce auth gate — no bypass allowed
-  if(!currentUser){ setTimeout(function(){ openAuthModal(); }, 700); }
+  applyAuthGate();
 }
+
+function applyAuthGate(){
+  var signedIn = !!currentUser && (typeof isAuthTokenValid !== 'function' || isAuthTokenValid());
+  var cover = document.getElementById('auth-gate-cover');
+
+  if (signedIn) {
+    if (cover) cover.style.display = 'none';
+    document.body.style.overflow = '';
+    return;
+  }
+
+  // Put a cover over the page so the library cannot be read or interacted
+  // with by anyone who has not signed up.
+  if (!cover) {
+    cover = document.createElement('div');
+    cover.id = 'auth-gate-cover';
+    cover.style.cssText =
+      'position:fixed;inset:0;z-index:95;background:var(--bg,#fff);' +
+      'display:flex;align-items:center;justify-content:center;text-align:center;padding:32px';
+    cover.innerHTML =
+      '<div style="max-width:340px">' +
+        '<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:800;margin-bottom:8px">HymnDesk</div>' +
+        '<div style="font-size:14px;color:var(--text3);line-height:1.6">Sign in or create a free account to open the hymn library.</div>' +
+      '</div>';
+    document.body.appendChild(cover);
+  }
+  cover.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  openAuthModal();
+}
+
+// Wrap closeModal so the login panel cannot be dismissed while signed out,
+// no matter which code path asks for it.
+(function guardAuthModalClose(){
+  var _origCloseModal = closeModal;
+  window.closeModal = function(id){
+    if (id === 'auth-modal') {
+      var signedIn = !!currentUser && (typeof isAuthTokenValid !== 'function' || isAuthTokenValid());
+      if (!signedIn) return;   // refuse
+    }
+    return _origCloseModal(id);
+  };
+  closeModal = window.closeModal;
+})();
 
 // ── Wire up events ────────────────────────────────────────────────────────────
 on('user-login-btn',    'click',  openAuthModal);
