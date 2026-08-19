@@ -5123,10 +5123,19 @@ async function flushFeedbackQueue(){
   for(var i=0; i<queue.length; i++){
     var f = queue[i];
     try{
+      // Attribute the queued item to whoever is signed in now if it was
+      // saved without a user id. Sending the literal string 'anonymous'
+      // put junk in the user_id column and made these rows hard to trace.
       await gasCall({ action:'userFeedback', type:f.type, message:f.message,
-        name:f.name, userId:f.userId||'anonymous', device:f.device||'unknown' });
+        name:f.name,
+        userId: f.userId || (currentUser ? currentUser.id : null),
+        device: f.device || 'unknown' });
       sent.push(f.id);
-    } catch(e){ break; } // stop if still offline
+    } catch(e){
+      // Surface why the queue is not draining instead of failing silently.
+      try { console.error('[feedback] queue flush failed:', e); } catch(_e){}
+      break;
+    }
   }
   if(sent.length){
     queue = queue.filter(function(f){ return !sent.includes(f.id); });
@@ -8180,12 +8189,26 @@ function openAdEnquiry(slideIndex){
       document.getElementById('ufb-message').value='';
       setTimeout(function(){ closeModal('user-feedback-modal'); },1800);
     } catch(e){
-      // Store locally if offline
+      // Only treat this as an offline save if we are actually offline.
+      // Anything else is a real failure and must be shown as one — quietly
+      // reporting success while the message goes nowhere is worse than an
+      // honest error.
+      var offline = (typeof navigator !== 'undefined' && navigator.onLine === false)
+        || /Failed to fetch|NetworkError|timed out|aborted/i.test(e && e.message || '');
       var stored=JSON.parse(localStorage.getItem('lh_user_feedback')||'[]');
-      stored.unshift({id:uid(),type,message,name,date:Date.now()});
+      stored.unshift({id:uid(),type,message,name,date:Date.now(),
+                      userId: currentUser?currentUser.id:null, device:getDeviceInfo()});
       localStorage.setItem('lh_user_feedback',JSON.stringify(stored.slice(0,100)));
-      msgEl.className='auth-msg ok';msgEl.textContent='Saved — will be sent when you are back online.';
-      setTimeout(function(){ closeModal('user-feedback-modal'); },1800);
+      if (offline) {
+        msgEl.className='auth-msg ok';
+        msgEl.textContent='Saved — will be sent when you are back online.';
+        setTimeout(function(){ closeModal('user-feedback-modal'); },1800);
+      } else {
+        msgEl.className='auth-msg err';
+        msgEl.textContent='Could not send: ' + ((e && e.message) || 'unknown error')
+          + ' — saved on this device and will retry.';
+        try { console.error('[feedback] send failed:', e); } catch(_e){}
+      }
     } finally { this.disabled=false; this.textContent='Send Feedback'; }
   });
   // Pre-fill name if signed in
