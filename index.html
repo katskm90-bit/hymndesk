@@ -2088,18 +2088,17 @@ var CloudSync = (function(){
   // ── HTTP helper — minimal, no retries built in (retries handled at op level) ─
   function rpc(method, path, body, extraHeaders){
     var url = apiBase + '/rest/v1/' + path;
-    // CloudSync only ever touches the signed-in user's own rows, so it always
-    // needs the pass. If there is no valid pass the request would be refused
-    // by the database anyway — see the guard in isConfigured().
-    var bearer = (typeof isAuthTokenValid === 'function' && isAuthTokenValid())
-      ? getAuthToken()
-      : SUPABASE_ANON_KEY;
+    // Authorization carries the public key; the session header identifies the
+    // user. CloudSync only ever touches that user's own rows, and the database
+    // enforces that using the session header.
     var headers = {
       'apikey': SUPABASE_ANON_KEY,
-      'Authorization': 'Bearer ' + bearer,
+      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     };
+    var _sess = (typeof getAuthToken === 'function') ? getAuthToken() : null;
+    if (_sess) headers['X-HymnDesk-Session'] = _sess;
     if (extraHeaders) {
       for (var k in extraHeaders) headers[k] = extraHeaders[k];
     }
@@ -5198,13 +5197,15 @@ function _clearSessionCookie(){
   try { document.cookie = 'hd_session=;path=/;max-age=0;SameSite=Lax;Secure'; } catch(e){}
 }
 
-// ── AUTH TOKEN STORE ────────────────────────────────────────────────────────
-// When a user signs in, the database hands back a signed pass (a JWT) that
-// names that one user. Every request afterwards carries it, and the database
-// uses it to decide which rows the request may touch.
+// ── SESSION KEY STORE ───────────────────────────────────────────────────────
+// When a user signs in, the database creates a session and returns a long
+// random key. The app sends that key back on every request in a header, and
+// the database uses it to work out whose data may be touched.
 //
-// Without a pass the public key can do almost nothing, so this store is what
-// makes normal use of the app work at all.
+// The key is opaque — there is nothing to read inside it. Whether it is still
+// valid is the database's decision, not ours. If it has been cancelled or has
+// lapsed, requests come back empty or refused, and the app signs the person
+// out. Sessions last 90 days.
 var _authToken = null;
 
 function setAuthToken(token){
@@ -5221,21 +5222,11 @@ function getAuthToken(){
   return _authToken;
 }
 
-// Is the stored pass still valid? Read the expiry out of the middle segment.
-// Treats anything unreadable as expired so we fail closed, never open.
+// Do we hold a session key at all? The database is the authority on whether
+// it is still good; this only checks we have something plausible to send.
 function isAuthTokenValid(){
   var t = getAuthToken();
-  if (!t) return false;
-  try {
-    var parts = t.split('.');
-    if (parts.length !== 3) return false;
-    var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    while (b64.length % 4) b64 += '=';
-    var claims = JSON.parse(atob(b64));
-    if (!claims.exp) return false;
-    // 60-second margin so a pass about to lapse is treated as already lapsed
-    return (claims.exp * 1000) > (Date.now() + 60000);
-  } catch(e){ return false; }
+  return !!(t && t.length >= 32);
 }
 
 function saveUserSession(user){
@@ -5325,18 +5316,17 @@ async function gasCall(payload){
   // can leave the UI stuck on "Saving…" or "Signing in…" indefinitely.
   async function _sb(method, path, body, extraHeaders){
     var url = SUPABASE_BASE + '/rest/v1/' + path;
-    // Send the signed-in user's pass when we have a valid one, otherwise fall
-    // back to the public key. The public key can only log in, register, and
-    // record an app open — everything else needs a pass.
-    var bearer = (typeof isAuthTokenValid === 'function' && isAuthTokenValid())
-      ? getAuthToken()
-      : SUPABASE_ANON_KEY;
+    // Authorization always carries the public key — that is what Supabase
+    // expects. Who we are is carried separately in the session header below,
+    // which the database looks up to decide which rows we may touch.
     var headers = {
       'apikey':        SUPABASE_ANON_KEY,
-      'Authorization': 'Bearer ' + bearer,
+      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
       'Content-Type':  'application/json',
       'Accept':        'application/json'
     };
+    var _sess = (typeof getAuthToken === 'function') ? getAuthToken() : null;
+    if (_sess) headers['X-HymnDesk-Session'] = _sess;
     if (extraHeaders) for (var k in extraHeaders) headers[k] = extraHeaders[k];
     var controller = new AbortController();
     var timeoutId = setTimeout(function(){ controller.abort(); }, 20000);
@@ -5866,6 +5856,13 @@ async function doRegister(){
 
 // ── LOGOUT ────────────────────────────────────────────────────────────────────
 function doLogout(){
+  // Cancel the session in the database first, so the key cannot be reused
+  // even if a copy of it survives somewhere. Fire and forget: if the network
+  // is down we still sign out locally, and the session lapses on its own.
+  try {
+    var t = getAuthToken();
+    if (t) { _sb('POST', 'rpc/logout_user', { p_token: t }).catch(function(){}); }
+  } catch(e){}
   try { if (typeof CloudSync !== 'undefined' && CloudSync.onSignOut) CloudSync.onSignOut(); } catch(e){}
   clearUserSession();
   renderUserBtn();
