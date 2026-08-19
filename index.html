@@ -4363,9 +4363,11 @@ function renderHistoryList(){
   }).join('');
 }
 on('view-history-btn', 'click',()=>{renderHistoryList();openModal('history-modal');});
+var _clearHistArmed = false;
 on('clear-history-btn', 'click',function(){
   if(!serviceHistory.length){ toast('No history to clear','info'); return; }
-  if(!clearServiceHistory._armed){clearServiceHistory._armed=true;toast('This will permanently clear your service history. Tap Clear again to confirm.','info');setTimeout(function(){clearServiceHistory._armed=false;},4000);return;}clearServiceHistory._armed=false;
+  if(!_clearHistArmed){_clearHistArmed=true;toast('This will permanently clear your service history. Tap Clear again to confirm.','info');setTimeout(function(){_clearHistArmed=false;},4000);return;}
+  _clearHistArmed=false;
   serviceHistory=[];save();renderHistoryList();toast('Service history cleared','info');
 });
 on('close-history-modal', 'click',()=>closeModal('history-modal'));
@@ -6026,13 +6028,27 @@ async function loadStats(){
     document.getElementById('stats-loading').style.display = 'none';
     document.getElementById('stats-content').style.display = 'block';
   } catch(e){
-    // Show a friendly message with a clear next step. The exact technical
-    // error is logged to the console for the admin to inspect if needed.
+    // Surface the actual error so the cause is visible, not hidden behind a
+    // generic "check your connection" message. Most failures here are a
+    // missing Supabase RPC or an RLS policy blocking the read, not the network.
     try { console.warn('loadStats failed:', e); } catch(_e){}
     var loadingEl = document.getElementById('stats-loading');
     if (loadingEl) {
+      var detail = (e && e.message) ? String(e.message) : 'Unknown error';
+      var hint = '';
+      if (/get_admin_users/i.test(detail) || /404/.test(detail)) {
+        hint = 'The <code>get_admin_users</code> RPC is missing or not exposed in Supabase. Create it as a SECURITY DEFINER function and grant EXECUTE to the anon role.';
+      } else if (/401|403|JWT|apikey/i.test(detail)) {
+        hint = 'Supabase rejected the key. Check that the anon key in the app matches the project and has not been rotated.';
+      } else if (/timed out|Failed to fetch|NetworkError/i.test(detail)) {
+        hint = 'Could not reach Supabase. Check your internet connection.';
+      } else if (/permission|policy|RLS/i.test(detail)) {
+        hint = 'Row Level Security is blocking the read. Review the policy on the users and app_logins tables.';
+      }
       loadingEl.innerHTML =
-        '<p style="color:var(--text3);font-size:13px;margin-bottom:10px">Could not load analytics — please check your connection.</p>' +
+        '<p style="color:#dc2626;font-size:13px;font-weight:600;margin-bottom:6px">Analytics could not load</p>' +
+        '<p style="color:var(--text3);font-size:12px;margin-bottom:8px;word-break:break-word">' + escHtml(detail) + '</p>' +
+        (hint ? '<p style="color:var(--text3);font-size:12px;margin-bottom:10px;line-height:1.5">' + hint + '</p>' : '') +
         '<button class="btn btn-ghost" onclick="loadStats()" style="font-size:12px">Try again</button>';
     }
   }
@@ -8253,8 +8269,10 @@ on('broadcast-btn', 'click', function() {
   }
 });
 on('close-broadcast-modal', 'click', function() { closeModal('broadcast-modal'); });
+var _clearBcArmed = false;
 on('bc-clear-btn', 'click', function() {
-  if(!clearBroadcastMsg._armed){clearBroadcastMsg._armed=true;toast('This will clear the broadcast for all users on next publish. Tap again to confirm.','info');setTimeout(function(){clearBroadcastMsg._armed=false;},4000);return;}clearBroadcastMsg._armed=false;
+  if(!_clearBcArmed){_clearBcArmed=true;toast('This will clear the broadcast for all users on next publish. Tap again to confirm.','info');setTimeout(function(){_clearBcArmed=false;},4000);return;}
+  _clearBcArmed=false;
   infoData.broadcast = null;
   save();
   // Also remove the visible banner immediately on this device
@@ -9140,7 +9158,7 @@ function buildPitchPipeGrid() {
 
     // Click-to-toggle: single click starts/stops. No hold required.
     btn.addEventListener('click', startNote);
-    btn.addEventListener('touchend', function(e){ e.preventDefault(); startNote(e); }, { passive: false });btn.addEventListener('touchcancel', endNote);
+    btn.addEventListener('touchend', function(e){ e.preventDefault(); startNote(e); }, { passive: false });
 
     grid.appendChild(btn);
   });
