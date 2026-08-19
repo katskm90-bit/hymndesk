@@ -5389,7 +5389,8 @@ async function gasCall(payload){
         return { success: true, user: {
           id: u.id, name: u.name, email: u.email,
           church: u.church, conference: u.conference, country: u.country,
-          isAdmin: !!u.is_admin, createdAt: u.created_at
+          isAdmin: !!u.is_admin, createdAt: u.created_at,
+          token: u.token          // signed pass — saveUserSession stores it separately
         }};
       }
 
@@ -5416,7 +5417,8 @@ async function gasCall(payload){
           return { success: true, user: {
             id: u.id, name: u.name, email: u.email,
             church: u.church, conference: u.conference, country: u.country,
-            isAdmin: !!u.is_admin, createdAt: u.created_at
+            isAdmin: !!u.is_admin, createdAt: u.created_at,
+            token: u.token        // signed pass — saveUserSession stores it separately
           }};
         } catch(e){
           // Unique-violation on email → friendly message
@@ -6361,6 +6363,15 @@ function applyAuthGate(){
   if (signedIn) {
     if (cover) cover.style.display = 'none';
     document.body.style.overflow = '';
+    // If this visit came in via the admin link, ask for the admin password
+    // now — after the person has signed in, not before. Asking first was
+    // confusing: it looked as though the admin password had been rejected
+    // and dropped you back to the ordinary login.
+    try {
+      if (_adminPending && typeof _showAdminPwdModal === 'function') {
+        setTimeout(_showAdminPwdModal, 300);
+      }
+    } catch(e){}
     return;
   }
 
@@ -8220,8 +8231,9 @@ if (sessionStorage.getItem('hd_admin_entry') === '1') {
     _adminPending = true;
   }
 }
-// Trigger admin modal if ?admin=true was in URL or redirected from admin.html
-if(typeof _showAdminPwdModal==='function') setTimeout(_showAdminPwdModal, 800);
+// Trigger admin modal if ?admin=true was in URL or redirected from admin.html.
+// This no longer fires on a timer: applyAuthGate() calls it once the person
+// is signed in, so the two prompts appear in a sensible order.
 // Logo click goes home
 on('logo-home-btn','click',function(){
   if(currentBook) closeBook();
