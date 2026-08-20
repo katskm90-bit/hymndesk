@@ -2969,16 +2969,25 @@ on('submit-rating-btn', 'click', async function() {
     feedbackList.unshift(entry);
     save();
     closeModal('rate-modal');
-    toast('Thank you for your feedback!', 'success');
-    // Send to GAS so admin can see it
+    // Send first, THEN confirm — telling the user "thank you" before we know
+    // whether the rating actually reached the server is how a real failure
+    // stays invisible. The rating is already safe locally either way.
     try {
       await gasCall({ action: 'submitRating', rating: entry.rating, comment: entry.comment,
         name: entry.name, userId: entry.userId, date: entry.date });
+      toast('Thank you for your feedback!', 'success');
     } catch(e) {
-      // Queue for later flush when online
+      var offline = (typeof navigator !== 'undefined' && navigator.onLine === false)
+        || /Failed to fetch|NetworkError|timed out|aborted/i.test(e && e.message || '');
       var q = JSON.parse(localStorage.getItem('lh_rating_queue')||'[]');
       q.push(entry);
       localStorage.setItem('lh_rating_queue', JSON.stringify(q.slice(0,200)));
+      if (offline) {
+        toast('Saved — will send when you are back online.', 'info');
+      } else {
+        toast('Could not send rating: ' + ((e && e.message) || 'unknown error') + ' — saved and will retry.', 'error');
+        try { console.error('[rating] send failed:', e); } catch(_e){}
+      }
     }
 });
 
@@ -3308,6 +3317,11 @@ function openBook(book,lang){
   $i('book-search').value='';$i('bfilter-type').value='all';$i('bfilter-chorus').value='all';
   $i('home-view').style.display='none';$i('book-view').style.display='';
   renderHymnGrid();
+  // Belt-and-braces: some browsers autofill a visible text field a moment
+  // after it paints, even after we have just cleared it above. A second
+  // clear on the next tick catches that case without changing any behaviour
+  // for browsers that behave correctly the first time.
+  setTimeout(function(){ var bs=$i('book-search'); if(bs && bs.value) bs.value=''; }, 50);
 }
 function closeBook(){
   currentBook=null;$i('book-view').style.display='none';$i('home-view').style.display='';renderBookGrid();
@@ -5155,7 +5169,10 @@ async function flushRatingQueue(){
       await gasCall({ action:'submitRating', rating:r.rating, comment:r.comment,
         name:r.name, userId:r.userId, date:r.date });
       sent.push(r.id);
-    } catch(e){ break; }
+    } catch(e){
+      try { console.error('[rating] queue flush failed:', e); } catch(_e){}
+      break;
+    }
   }
   if(sent.length){
     queue = queue.filter(function(r){ return !sent.includes(r.id); });
@@ -6369,6 +6386,13 @@ function applyAuthGate(){
   if (signedIn) {
     if (cover) cover.style.display = 'none';
     document.body.style.overflow = '';
+    // Browsers sometimes autofill visible text fields regardless of
+    // autocomplete="off" (Chrome does this for fields it decides look like a
+    // saved contact field). Rather than trust the browser's cooperation, we
+    // force every search field empty ourselves at the moment it matters —
+    // here, once sign-in completes and the library becomes visible.
+    var gs = document.getElementById('global-search');
+    if (gs && gs.value) { gs.value = ''; try { handleGlobalSearch(''); } catch(e){} }
     // If this visit came in via the admin link, ask for the admin password
     // now — after the person has signed in, not before. Asking first was
     // confusing: it looked as though the admin password had been rejected
@@ -7196,6 +7220,8 @@ function _hotdPopulateHymnDropdown(){
   if (hidden) hidden.value = '';
   if (results) { results.innerHTML = ''; results.style.display = 'none'; }
   if (selected) { selected.innerHTML = ''; selected.style.display = 'none'; }
+  // Belt-and-braces re-clear — see the matching comment in openBook().
+  setTimeout(function(){ var s=document.getElementById('hotd-hymn-search'); if(s && s.value) s.value=''; }, 50);
 }
 
 function _hotdRenderSearchResults(query){
@@ -8408,6 +8434,8 @@ function renderUserMgmtList(users) {
 
 on('user-mgmt-btn', 'click', function() {
   closeModal('info-modal');
+  var umSearch = document.getElementById('um-search');
+  if (umSearch) umSearch.value = ''; // force clear — browsers can autofill this despite no autocomplete hint
   openModal('user-mgmt-modal');
   loadUserMgmt();
 });
