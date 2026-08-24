@@ -2503,6 +2503,21 @@ var CloudSync = (function(){
           keepLocalItems.forEach(function(i){ repItems.push(i); });
         }
       } catch(e){}
+
+      // Re-point the "currently open" references at the freshly rebuilt
+      // objects. The rebuild above replaces every entry with a new object,
+      // which would otherwise leave an open detail panel or an in-progress
+      // rename holding a detached copy — edits would then silently do nothing.
+      try {
+        if (typeof currentRep !== 'undefined' && currentRep && currentRep.id) {
+          var liveCur = repertoires.find(function(r){ return r.id === currentRep.id; });
+          if (liveCur) currentRep = liveCur;
+        }
+        if (typeof editingRep !== 'undefined' && editingRep && editingRep.id) {
+          var liveEdit = repertoires.find(function(r){ return r.id === editingRep.id; });
+          if (liveEdit) editingRep = liveEdit;
+        }
+      } catch(e){}
       if (typeof serviceHistory !== 'undefined') {
         serviceHistory.length = 0;
         cloudHistory.forEach(function(c){
@@ -3724,9 +3739,26 @@ function renderSlide(){
   setTimeout(()=>{wrap.innerHTML=`<div class="proj-stanza-label">${label}</div><p class="proj-stanza-text" style="font-size:${projFontSize}px">${escHtml(s.text)}</p>`;wrap.style.opacity='1';wrap.style.transition='opacity 0.18s';},130);
   $i('proj-indicator').textContent=(projSeqIndex+1)+' of '+projSequence.length;
   const isLast=projSeqIndex>=projSequence.length-1,hasNext=fromRep&&repProjIndex<repProjection.length-1;
-  $i('prev-stanza').disabled=projSeqIndex===0&&(!fromRep||repProjIndex===0);
-  $i('next-stanza').disabled=isLast&&!hasNext;
-  $i('next-label').textContent='Next';
+  // Outside a repertoire, Next/Prev must stay usable at the ends of a hymn so
+  // they can carry you into the next or previous hymn in the book. Without
+  // this the buttons were greyed out at the last stanza and the navigation
+  // could never be triggered by a click.
+  var hasAdjNext = false, hasAdjPrev = false;
+  if (!fromRep) {
+    try {
+      var _cur = currentProjHymnData || projHymn;
+      if (_cur && _cur.book) {
+        var _sib = hymns.filter(function(h){
+          return !h.deletedAt && h.book === _cur.book && h.language === _cur.language;
+        }).sort(function(a,b){ return a.number - b.number; });
+        var _i = _sib.findIndex(function(h){ return h.id === _cur.id; });
+        if (_i > -1) { hasAdjNext = !!_sib[_i+1]; hasAdjPrev = !!_sib[_i-1]; }
+      }
+    } catch(e){}
+  }
+  $i('prev-stanza').disabled=projSeqIndex===0&&(!fromRep||repProjIndex===0)&&!hasAdjPrev;
+  $i('next-stanza').disabled=isLast&&!hasNext&&!hasAdjNext;
+  $i('next-label').textContent=(isLast&&!hasNext&&hasAdjNext)?'Next hymn':'Next';
   _saveResumeState();
 }
 function nextSlide(){
@@ -3734,11 +3766,48 @@ function nextSlide(){
   const isLast=projSeqIndex>=projSequence.length-1;
   if(isLast&&fromRep&&repProjIndex<repProjection.length-1){repProjIndex++;projectRepItem(repProjection[repProjIndex]);}
   else if(!isLast){projSeqIndex++;renderSlide();if(autoAdvActive){clearInterval(autoAdvTimer);startAutoAdv();}}
+  else if(isLast&&!fromRep){ _projGoToAdjacentHymn(1); }
+}
+
+// Moves projection to the next (dir = 1) or previous (dir = -1) hymn in the
+// same book, ordered by hymn number. This is the desktop counterpart to the
+// swipe navigation in the mobile reading view — without it, reaching the last
+// stanza or chorus left you stuck and you had to close the hymn and reopen
+// the next one from the book list.
+//
+// Only applies outside repertoire mode: inside a repertoire the running order
+// is deliberate and is handled above.
+function _projGoToAdjacentHymn(dir){
+  var cur = currentProjHymnData || projHymn;
+  if(!cur || !cur.book) return;
+
+  var siblings = hymns.filter(function(h){
+    return !h.deletedAt
+        && h.book === cur.book
+        && h.language === cur.language;
+  }).sort(function(a,b){ return a.number - b.number; });
+
+  var idx = siblings.findIndex(function(h){ return h.id === cur.id; });
+  if(idx < 0) return;
+  var target = siblings[idx + dir];
+  if(!target){
+    toast(dir > 0 ? 'Last hymn in this book' : 'First hymn in this book', 'info');
+    return;
+  }
+
+  startProjection(target, {});
+  // Entering a hymn backwards should land on its LAST slide, so moving back
+  // and forth through the book feels continuous rather than jumping.
+  if(dir < 0 && projSequence && projSequence.length){
+    projSeqIndex = projSequence.length - 1;
+    renderSlide();
+  }
 }
 function prevSlide(){
   if(projHymn&&(projHymn.type==='divider'||projHymn.type==='segment'||projHymn.type==='announcement')){if(fromRep&&repProjIndex>0){repProjIndex--;projectRepItem(repProjection[repProjIndex]);}return;}
   if(projSeqIndex===0&&fromRep&&repProjIndex>0){repProjIndex--;projectRepItem(repProjection[repProjIndex]);}
   else if(projSeqIndex>0){projSeqIndex--;renderSlide();}
+  else if(projSeqIndex===0&&!fromRep){ _projGoToAdjacentHymn(-1); }
 }
 function exitProjection(){
   $i('projection').classList.remove('open');projHymn=null;projSequence=[];projSeqIndex=0;fromRep=false;repProjection=[];repProjIndex=0;currentProjHymnData=null;
@@ -4022,13 +4091,27 @@ function saveRep(){
   const name=$i('rf-name').value.trim(),date=$i('rf-date').value;
   if(!name){$i('rep-form-error').textContent='Please enter a name.';$i('rep-form-error').classList.add('show');return;}
   if(editingRep){
-    editingRep.name=name;editingRep.date=date;editingRep._updatedAt=Date.now();
+    // Look the record up by id in the live array rather than writing to the
+    // object reference we were handed.
+    //
+    // Why this matters: pull() runs every 10 seconds and rebuilds the
+    // repertoires array with BRAND NEW objects. Any reference captured
+    // before that pull is left pointing at an object that is no longer in
+    // the array. Writing the new name to it changed a detached copy, so the
+    // rename appeared to do nothing.
+    var live = (repertoires || []).find(function(r){ return r.id === editingRep.id; });
+    var target = live || editingRep;
+    target.name = name;
+    target.date = date;
+    target._updatedAt = Date.now();
+    // Keep the other references in step so the open detail panel updates too.
+    editingRep = target;
+    if (currentRep && currentRep.id === target.id) currentRep = target;
     toast('Repertoire updated','success');
   }
   else{
     // Stamp the owner at creation time so the local record has the same shape
-    // as the cloud record. Previously user_id was only added at upload time,
-    // which left local and cloud copies inconsistent.
+    // as the cloud record.
     repertoires.push({
       id:uid(), name, date,
       userId: (currentUser ? currentUser.id : null),
