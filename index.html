@@ -4780,6 +4780,7 @@ async function syncHymnsFromGithub(){
       const freshData = await freshRes.json();
       const remoteHymns = freshData.hymns || [];
       if(remoteHymns.length) hymns = remoteHymns;
+      if (typeof _mlBuildBookMap === 'function') _mlBuildBookMap();
       renderBookGrid();
       updateHymnCount();
       showSyncBanner('Library loaded — '+hymns.length+' hymns');
@@ -6912,9 +6913,11 @@ var _mlBookMap = {};   // language -> book name
 var _mlSelectedLangs = [];   // ordered list of selected language names, max 3
 var _mlEnabled = false;      // true when 2+ languages are active
 
-(function _mlInit(){
-  // Build the book map from the actual hymn data. Each book name belongs to
-  // exactly one language; we take the first match we find per language.
+// Build the book map from the hymn data. Must be called AFTER hymns have
+// loaded — the old approach ran as an IIFE at parse time when hymns was
+// still an empty array, so the map was always empty and the picker showed
+// nothing.
+function _mlBuildBookMap(){
   var seen = {};
   (hymns || []).forEach(function(h){
     if (h.deletedAt) return;
@@ -6923,8 +6926,10 @@ var _mlEnabled = false;      // true when 2+ languages are active
     }
   });
   _mlBookMap = seen;
+}
 
-  // Restore the user's previous selection from localStorage.
+// Restore the user's previous selection from localStorage.
+(function(){
   try {
     var stored = JSON.parse(localStorage.getItem('lh_ml_langs') || '[]');
     if (Array.isArray(stored) && stored.length) {
@@ -7081,24 +7086,37 @@ function _mlRenderSlide(slide){
 
 // Language picker UI — opens when user clicks the Lang button in projection header
 function _mlOpenPicker(){
+  // Rebuild the book map from whatever hymns are loaded RIGHT NOW, not from
+  // what was available at parse time (which was nothing).
+  _mlBuildBookMap();
+
   var available = Object.keys(_mlBookMap).sort();
+  if (!available.length) {
+    toast('Hymn library still loading — try again in a moment', 'info');
+    return;
+  }
+
+  // Every colour is hardcoded rather than using CSS variables. The picker
+  // renders inside the projection overlay where var(--bg) and var(--text)
+  // resolve to the projection theme's colours — dark card on a dark
+  // backdrop, making everything invisible.
   var html = '<div style="background:rgba(15,23,42,0.95);position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:20px" id="ml-picker-overlay">';
-  html += '<div style="background:var(--bg,#1a1a2e);border-radius:14px;padding:24px;max-width:460px;width:100%;color:var(--text,#fff)">';
-  html += '<h3 style="font-family:Playfair Display,serif;font-size:20px;margin:0 0 4px">Multilingual projection</h3>';
-  html += '<p style="font-size:13px;color:rgba(255,255,255,0.6);margin:0 0 16px">Choose up to 3 languages. The first is shown as the primary.</p>';
+  html += '<div style="background:#1e293b;border-radius:14px;padding:24px;max-width:460px;width:100%;color:#f1f5f9;box-shadow:0 25px 50px rgba(0,0,0,0.5)">';
+  html += '<h3 style="font-family:Playfair Display,serif;font-size:20px;margin:0 0 4px;color:#fff">Multilingual projection</h3>';
+  html += '<p style="font-size:13px;color:#94a3b8;margin:0 0 16px">Choose up to 3 languages. Tap in the order you want them displayed.</p>';
 
   available.forEach(function(lang){
     var active = _mlSelectedLangs.indexOf(lang) >= 0;
     var idx = _mlSelectedLangs.indexOf(lang);
     var badge = active ? '<span style="background:#E8650A;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;margin-left:8px">' + (idx+1) + '</span>' : '';
-    html += '<button class="ml-pick-chip' + (active ? ' ml-active' : '') + '" data-lang="' + escHtml(lang) + '" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 14px;margin-bottom:6px;border-radius:9px;border:1px solid ' + (active ? '#E8650A' : 'rgba(255,255,255,0.12)') + ';background:' + (active ? 'rgba(232,101,10,0.12)' : 'rgba(255,255,255,0.04)') + ';color:#fff;font-size:14px;cursor:pointer;font-family:Inter,sans-serif;text-align:left">';
-    html += '<span>' + escHtml(lang) + badge + '</span>';
-    html += '<span style="font-size:11px;opacity:0.5">' + (_mlBookMap[lang] || '') + '</span>';
+    html += '<button class="ml-pick-chip' + (active ? ' ml-active' : '') + '" data-lang="' + escHtml(lang) + '" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:12px 16px;margin-bottom:6px;border-radius:9px;border:1px solid ' + (active ? '#E8650A' : '#334155') + ';background:' + (active ? 'rgba(232,101,10,0.15)' : '#0f172a') + ';color:#e2e8f0;font-size:14px;cursor:pointer;font-family:Inter,sans-serif;text-align:left">';
+    html += '<span style="color:#fff">' + escHtml(lang) + badge + '</span>';
+    html += '<span style="font-size:11px;color:#64748b">' + (_mlBookMap[lang] || '') + '</span>';
     html += '</button>';
   });
 
   html += '<div style="display:flex;gap:8px;margin-top:16px">';
-  html += '<button id="ml-pick-clear" style="flex:1;padding:10px;border-radius:9px;border:1px solid rgba(255,255,255,0.15);background:transparent;color:#fff;font-size:13px;cursor:pointer;font-family:Inter,sans-serif">Single language</button>';
+  html += '<button id="ml-pick-clear" style="flex:1;padding:10px;border-radius:9px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:13px;cursor:pointer;font-family:Inter,sans-serif">Single language</button>';
   html += '<button id="ml-pick-done" style="flex:1;padding:10px;border-radius:9px;border:none;background:#E8650A;color:#fff;font-size:13px;cursor:pointer;font-weight:600;font-family:Inter,sans-serif">Apply</button>';
   html += '</div></div></div>';
 
