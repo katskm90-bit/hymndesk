@@ -532,6 +532,11 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
 
       <button class="btn btn-purple btn-full" id="open-rate-btn">Rate Us</button>
 
+      <div style="margin-top:15px;padding-top:15px;border-top:1px solid var(--border)">
+        <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px">Pedal &amp; MIDI control</div>
+        <p style="font-size:12px;color:var(--text3);margin:0 0 10px;line-height:1.5">Use a sustain pedal or MIDI keyboard to move through slides without taking your hands off your instrument. Sustain pedal advances, soft pedal goes back.</p>
+        <button class="btn btn-outline" id="midi-toggle-btn" style="font-size:13px">Enable MIDI control</button>
+      </div>
       <div id="admin-info-tools" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid var(--border);">
         <p style="font-size:11px; color:var(--text4); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.05em; font-weight:700;">Admin Controls</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">
@@ -665,6 +670,7 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
       <button class="proj-btn yt" id="proj-yt-btn" disabled><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>YouTube</button>
 
       <button class="proj-btn inst" id="proj-inst-btn" disabled><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>Instr.</button>
+      <button class="proj-btn" id="proj-cast-btn" title="Cast to a smart TV or Chromecast" style="display:none"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" fill="none" stroke="currentColor"><path d="M2 16.1A5 5 0 015.9 20M2 12.05A9 9 0 019.95 20M2 8V6a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2h-6"/><line x1="2" y1="20" x2="2.01" y2="20"/></svg>Cast</button>
       <button class="proj-btn" id="proj-lang-btn" title="Multilingual projection"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>Lang</button>
       <button class="proj-btn solfa" id="proj-solfa-btn" disabled><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M9 19V6l12-3v13"/><circle cx="6" cy="19" r="3"/><circle cx="18" cy="16" r="3"/></svg>Sol-fa</button>
       <button class="proj-btn mic-btn" id="proj-mic-btn" style="display: none;"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>Voice</button>
@@ -1850,6 +1856,28 @@ if (IS_PROJECTOR_WINDOW) {
       };
       // Announce we're ready so the control window can send the current slide
       channel.postMessage({ type: 'projector-ready' });
+
+      // ALSO listen for cast messages. When this page is opened on a smart TV
+      // via the Presentation API, there is no BroadcastChannel between the
+      // devices — slide updates arrive as presentation messages instead. The
+      // handling is identical, so the TV renders exactly like a second window.
+      try {
+        if (navigator.presentation && navigator.presentation.receiver) {
+          navigator.presentation.receiver.connectionList.then(function(list){
+            function wire(conn){
+              conn.onmessage = function(ev){
+                var m;
+                try { m = JSON.parse(ev.data); } catch(e){ return; }
+                if (m.type === 'slide')      showSlide(m);
+                else if (m.type === 'theme') applyTheme(m.theme);
+                else if (m.type === 'clear') showWaiting('Projector cleared.');
+              };
+            }
+            list.connections.forEach(wire);
+            list.onconnectionavailable = function(ev){ wire(ev.connection); };
+          }).catch(function(){});
+        }
+      } catch(e){}
     } catch(e){
       waiting.innerHTML = '<div style="color:#ff6b6b;font-size:16px">Your browser does not support BroadcastChannel. Dual-screen projection requires a modern browser (Chrome, Edge, Firefox, Safari 15.4+).</div>';
     }
@@ -1885,7 +1913,11 @@ const SEGMENT_PRESETS=['Sabbath School','Divine Service','Announcements','Specia
 // Admin password is verified by SHA-256 hash. The hash below is one-way and
 // does not reveal the password. The raw password is never stored in source.
 // To rotate the password, generate a new SHA-256 hash and replace the value.
-const _ADMIN_HASH = '921ad2ff131a37d593201de326cdcf074a0f7d20d37317efc490a5b0677ba029';
+// The admin password is NO LONGER checked in the browser. It is verified by
+// the database, which stores it as a bcrypt hash the browser never sees.
+// Previously a SHA-256 hash sat here in plain sight, and success was recorded
+// by setting a value in browser storage — meaning anyone could unlock the
+// admin interface from developer tools without knowing the password at all.
 
 let isAdmin = false;
 let _adminPending = false;
@@ -1920,23 +1952,49 @@ async function _submitAdminPwd() {
   var pwd   = input.value;
   if (!pwd) { input.focus(); return; }
   if (btn) { btn.textContent = 'Checking…'; btn.style.opacity = '0.7'; }
+
   try {
-    // Hash check against stored SHA-256 — the only verification path.
-    const hash = await _hashPwd(pwd);
-    if (hash === _ADMIN_HASH) {
+    // The password is checked by the database, not here. We send the attempt
+    // and receive only a yes/no. Nothing about the password is stored in or
+    // recoverable from the browser.
+    var res = await _sb('POST', 'rpc/verify_admin_password', { p_password: pwd });
+    var r = Array.isArray(res) ? res[0] : res;
+
+    if (r && r.ok === true) {
+      // The database has marked THIS session as elevated. The flag below is
+      // only a UI hint — the server is the authority, and it will refuse
+      // admin data to any session it has not elevated itself.
       isAdmin = true;
       sessionStorage.setItem('lh_admin_auth', 'true');
       document.getElementById('admin-pwd-overlay').style.display = 'none';
       location.reload();
-    } else {
-      err.style.display = 'block';
-      input.value = '';
-      input.focus();
+      return;
     }
+
+    // Report the specific reason so the person is not left guessing.
+    var reason = r && r.reason;
+    if (reason === 'locked') {
+      var mins = Math.ceil((r.retry_in_seconds || 900) / 60);
+      err.textContent = 'Too many incorrect attempts. Try again in ' + mins + ' minute' + (mins === 1 ? '' : 's') + '.';
+    } else if (reason === 'not_signed_in') {
+      err.textContent = 'Please sign in to your account first.';
+    } else if (reason === 'not_authorised') {
+      err.textContent = 'This account does not have administrator access.';
+    } else if (reason === 'not_configured') {
+      err.textContent = 'Admin access is not yet configured. Contact support.';
+    } else {
+      var left = (r && typeof r.attempts_remaining === 'number') ? r.attempts_remaining : null;
+      err.textContent = left !== null && left > 0
+        ? 'Incorrect password. ' + left + ' attempt' + (left === 1 ? '' : 's') + ' remaining.'
+        : 'Incorrect password.';
+    }
+    err.style.display = 'block';
+    input.value = '';
+    input.focus();
+
   } catch(e) {
-    // crypto.subtle is unavailable (typically non-HTTPS dev environments).
-    // Refuse to authenticate rather than fall back to a weaker check.
-    err.textContent = 'Admin login requires a secure (HTTPS) connection.';
+    // A network or server failure must NOT fall back to a weaker check.
+    err.textContent = 'Could not reach the server. Check your connection and try again.';
     err.style.display = 'block';
     input.value = '';
     input.focus();
@@ -6141,8 +6199,13 @@ function doLogout(){
   // is down we still sign out locally, and the session lapses on its own.
   try {
     var t = getAuthToken();
-    if (t) { _sb('POST', 'rpc/logout_user', { p_token: t }).catch(function(){}); }
+    if (t) {
+      // Drop admin elevation first, then cancel the session entirely.
+      _sb('POST', 'rpc/drop_admin_elevation', {}).catch(function(){});
+      _sb('POST', 'rpc/logout_user', { p_token: t }).catch(function(){});
+    }
   } catch(e){}
+  try { sessionStorage.removeItem('lh_admin_auth'); } catch(e){}
   try { if (typeof CloudSync !== 'undefined' && CloudSync.onSignOut) CloudSync.onSignOut(); } catch(e){}
   clearUserSession();
   renderUserBtn();
@@ -6618,7 +6681,6 @@ async function doResetPassword(){
 // ── FIRST LAUNCH PROMPT ────────────────────────────────────────────────────────
 // Show sign-in modal automatically on first install/visit, but only once.
 // Never shown again once a session exists or the user dismisses it.
-// ── SYNC STATUS INDICATOR ───────────────────────────────────────────────────
 
 // ── WAKE LOCK ──────────────────────────────────────────────────────────────
 // Keeps the screen on during projection and reading view. Released
@@ -6684,6 +6746,198 @@ function _updateMediaSession(hymnTitle, hymnBook, hymnNumber){
     navigator.mediaSession.setActionHandler('stop',  function(){ if(typeof stopReadingAudio==='function') stopReadingAudio(); });
   } catch(e){}
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CAST TO SMART TV (Presentation API)
+// ═══════════════════════════════════════════════════════════════════════════
+// This sits ALONGSIDE the existing dual-screen window — it does not replace
+// it. Dual-screen opens a second browser window you drag onto a projector.
+// Casting sends the same projector page to a Chromecast or smart TV over the
+// network, with no cable and no second window to manage.
+//
+// The receiving device loads /?proj=1 — the same projector page the dual
+// screen already uses — so both render identically. The only difference is
+// how slide updates travel: BroadcastChannel between windows on one machine,
+// presentation messages across the network to a TV.
+//
+// Chrome and Edge support this. On other browsers the Cast button stays
+// hidden and nothing changes.
+var _castConnection = null;
+var _castRequest = null;
+
+(function setupCast(){
+  if (typeof IS_PROJECTOR_WINDOW !== 'undefined' && IS_PROJECTOR_WINDOW) return;
+  if (typeof PresentationRequest === 'undefined') return;
+
+  var btn = document.getElementById('proj-cast-btn');
+  if (!btn) return;
+
+  try {
+    _castRequest = new PresentationRequest([location.origin + '/?proj=1']);
+  } catch(e){ return; }
+
+  function markConnected(on){
+    btn.style.background = on ? 'rgba(232,101,10,0.25)' : '';
+    btn.style.color = on ? '#FFB366' : '';
+    btn.title = on ? 'Casting — tap to stop' : 'Cast to a smart TV or Chromecast';
+  }
+
+  // Only reveal the button once a display is actually available, so users are
+  // not offered a feature that would find nothing.
+  try {
+    _castRequest.getAvailability().then(function(availability){
+      btn.style.display = availability.value ? 'inline-flex' : 'none';
+      availability.onchange = function(){
+        btn.style.display = this.value ? 'inline-flex' : 'none';
+      };
+    }).catch(function(){
+      btn.style.display = 'inline-flex';
+    });
+  } catch(e){ btn.style.display = 'inline-flex'; }
+
+  btn.addEventListener('click', function(){
+    if (_castConnection) {
+      try { _castConnection.terminate(); } catch(e){}
+      _castConnection = null;
+      markConnected(false);
+      toast('Stopped casting', 'info');
+      return;
+    }
+    _castRequest.start().then(function(connection){
+      _castConnection = connection;
+      markConnected(true);
+      toast('Casting to ' + (connection.name || 'display'), 'success');
+      connection.onconnect   = function(){ _castSendSlide(); };
+      connection.onclose     = function(){ _castConnection = null; markConnected(false); };
+      connection.onterminate = function(){ _castConnection = null; markConnected(false); };
+      setTimeout(_castSendSlide, 1200);   // let the receiver finish loading
+    }).catch(function(err){
+      if (err && err.name === 'AbortError') return;   // user closed the picker
+      toast('Could not start casting: ' + ((err && err.message) || 'no display found'), 'error');
+    });
+  });
+})();
+
+// Sends the current slide to the cast device, mirroring exactly what the
+// dual-screen path sends so a TV and a second window show the same thing.
+function _castSendSlide(){
+  if (!_castConnection) return;
+  try {
+    var content = document.getElementById('proj-content');
+    var projEl  = document.getElementById('projection');
+    if (!content) return;
+    var themePayload = { classId: 'bg-black' };
+    if (projEl) {
+      var known = ['bg-black','bg-navy','bg-purple','bg-forest','bg-crimson','bg-slate',
+                   'bg-vignette','bg-carbon','bg-velvet','bg-dotted','bg-paper',
+                   'bg-waves','bg-aurora','bg-sunset','bg-grid'];
+      var found = null;
+      for (var i = 0; i < known.length; i++) {
+        if (projEl.classList.contains(known[i])) { found = known[i]; break; }
+      }
+      themePayload = found ? { classId: found } : { css: projEl.style.background || '' };
+    }
+    _castConnection.send(JSON.stringify({
+      type: 'slide',
+      html: content.innerHTML,
+      theme: themePayload,
+      fontSize: (typeof projFontSize === 'number' ? projFontSize : 48)
+    }));
+  } catch(e){}
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WEB MIDI — foot pedal and MIDI keyboard slide control
+// ═══════════════════════════════════════════════════════════════════════════
+// A musician playing an instrument cannot take a hand off to click Next. A
+// sustain pedal plugged into a MIDI interface — or any MIDI keyboard — can
+// now move through slides.
+//
+//   Sustain pedal (CC 64) pressed        -> next slide
+//   Soft pedal (CC 67) pressed           -> previous slide
+//   Any note in the lowest octave (0-11) -> next slide
+//   Any note 12-23                       -> previous slide
+//
+// Permission is requested only when the user opts in, so nobody is prompted
+// for device access they did not ask for.
+var _midiEnabled = false;
+var _midiAccess = null;
+
+function _midiHandleMessage(msg){
+  // Only act while a projection or reading view is actually open, so a pedal
+  // press cannot change anything while the user is elsewhere in the app.
+  var projEl = document.getElementById('projection');
+  var readEl = document.getElementById('reading-view');
+  var isProj = projEl && projEl.classList.contains('open');
+  var isRead = readEl && readEl.classList.contains('open');
+  if (!isProj && !isRead) return;
+
+  var data = msg.data;
+  if (!data || data.length < 3) return;
+  var status = data[0] & 0xF0, d1 = data[1], d2 = data[2];
+  var goNext = false, goPrev = false;
+
+  if (status === 0xB0) {                        // Control Change
+    if (d1 === 64 && d2 >= 64) goNext = true;   // sustain pedal down
+    if (d1 === 67 && d2 >= 64) goPrev = true;   // soft pedal down
+  } else if (status === 0x90 && d2 > 0) {       // Note On, velocity > 0
+    if (d1 <= 11) goNext = true;
+    else if (d1 <= 23) goPrev = true;
+  }
+
+  try {
+    if (goNext)      { isProj ? nextSlide() : rdNextSlide(); }
+    else if (goPrev) { isProj ? prevSlide() : rdPrevSlide(); }
+  } catch(e){}
+}
+
+function _midiAttach(access){
+  access.inputs.forEach(function(input){ input.onmidimessage = _midiHandleMessage; });
+  // Pick up devices plugged in after we started listening.
+  access.onstatechange = function(e){
+    if (e.port && e.port.type === 'input' && e.port.state === 'connected') {
+      e.port.onmidimessage = _midiHandleMessage;
+    }
+  };
+}
+
+function enableMidiControl(){
+  if (!navigator.requestMIDIAccess) {
+    toast('MIDI is not supported in this browser. Try Chrome or Edge.', 'info');
+    return;
+  }
+  if (_midiEnabled) { toast('MIDI control is already on', 'info'); return; }
+  navigator.requestMIDIAccess().then(function(access){
+    _midiAccess = access; _midiEnabled = true;
+    _midiAttach(access);
+    try { localStorage.setItem('lh_midi_enabled', '1'); } catch(e){}
+    var count = 0; access.inputs.forEach(function(){ count++; });
+    toast(count
+      ? 'MIDI control on — ' + count + ' device' + (count === 1 ? '' : 's') + ' connected'
+      : 'MIDI control on — connect a pedal or keyboard', 'success');
+  }).catch(function(){ toast('MIDI access was not granted', 'error'); });
+}
+
+function disableMidiControl(){
+  if (_midiAccess) {
+    try { _midiAccess.inputs.forEach(function(i){ i.onmidimessage = null; }); } catch(e){}
+  }
+  _midiEnabled = false;
+  try { localStorage.removeItem('lh_midi_enabled'); } catch(e){}
+  toast('MIDI control off', 'info');
+}
+
+// Reconnect silently if the user turned MIDI on in a previous session.
+(function restoreMidi(){
+  if (typeof IS_PROJECTOR_WINDOW !== 'undefined' && IS_PROJECTOR_WINDOW) return;
+  try { if (localStorage.getItem('lh_midi_enabled') !== '1') return; } catch(e){ return; }
+  if (!navigator.requestMIDIAccess) return;
+  navigator.requestMIDIAccess().then(function(access){
+    _midiAccess = access; _midiEnabled = true; _midiAttach(access);
+  }).catch(function(){});
+})();
 
 
 // ── SYNC STATUS INDICATOR ───────────────────────────────────────────────────
@@ -7173,6 +7427,25 @@ function _mlOpenPicker(){
 }
 
 on('proj-lang-btn', 'click', _mlOpenPicker);
+
+// MIDI toggle — reflects current state and flips it
+(function wireMidiToggle(){
+  var btn = document.getElementById('midi-toggle-btn');
+  if (!btn) return;
+  function refresh(){
+    if (!navigator.requestMIDIAccess) {
+      btn.textContent = 'MIDI not supported in this browser';
+      btn.disabled = true;
+      return;
+    }
+    btn.textContent = _midiEnabled ? 'Disable MIDI control' : 'Enable MIDI control';
+  }
+  btn.addEventListener('click', function(){
+    if (_midiEnabled) disableMidiControl(); else enableMidiControl();
+    setTimeout(refresh, 400);
+  });
+  refresh();
+})();
 on('close-composer-modal', 'click', function(){ closeModal('composer-modal'); });
 on('cm-book-filter', 'change', _cmRender);
 on('cm-only-missing', 'change', _cmRender);
@@ -9868,6 +10141,9 @@ renderSlide = function() {
   }
 
   function sendSlide() {
+    // Mirror to the cast device too, if one is connected. Both paths can run
+    // at once — a projector on a second window AND a smart TV.
+    try { if (typeof _castSendSlide === 'function') _castSendSlide(); } catch(e){}
     if (!channel) return;
     var payload = currentSlidePayload();
     if (payload) channel.postMessage(payload);
