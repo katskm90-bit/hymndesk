@@ -922,7 +922,7 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
     <div id="rd-empty" style="display:none;text-align:center;padding:20px 0"><p style="color:var(--text3);font-size:14px">No items yet. Add hymns or service segments.</p></div>
     <div class="action-row">
       <button class="btn btn-purple" id="start-proj-btn" style="flex:2;padding:10px;justify-content:center">Start projection</button>
-      <button class="btn btn-outline" id="print-rep-btn" style="padding:10px;justify-content:center" title="Print or save as PDF for bulletin use"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" width="14" height="14"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>Print</button>
+      <button class="btn btn-outline" id="print-rep-btn" style="padding:10px;justify-content:center" title="Print or save as PDF for bulletin use"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" width="14" height="14"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>Print</button><button class="btn btn-outline" id="export-rep-btn" style="padding:10px;justify-content:center" title="Download the full running order with keys, tempos and cues"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>Export</button>
       <button class="btn btn-outline" id="share-rep-btn" style="padding:10px;justify-content:center"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" width="14" height="14"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share</button>
       <button class="btn btn-ghost" id="edit-rep-btn" style="padding:10px;justify-content:center">Edit</button>
       <button class="btn btn-red" id="del-rep-btn" style="padding:10px;justify-content:center">Delete</button>
@@ -1277,6 +1277,38 @@ html.dark .pp-note-btn:hover{background:#1a1208;color:#E8650A;border-color:#5a30
     </div>
     <div class="section-label">Scheduled (next 30 days)</div>
     <div id="hotd-list"></div>
+  </div>
+</div>
+
+<!-- Repertoire: Export -->
+<div class="modal-overlay" id="export-modal" style="z-index:175">
+  <div class="modal-box">
+    <button class="modal-close" id="close-export-modal"><svg viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    <h2 class="modal-title">Export repertoire</h2>
+    <p class="modal-sub" id="export-rep-name"></p>
+
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">What gets included</div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.7">
+        Running order &middot; hymn titles, books and numbers &middot; keys &middot; tempos &middot; singer cues &middot; repeated stanzas and choruses &middot; segments, announcements and custom slides
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="fl">Include full lyrics</label>
+      <select id="export-lyrics" class="fi" aria-label="Choose whether to include full lyrics">
+        <option value="no">No — running order and details only</option>
+        <option value="yes">Yes — add the words for every hymn</option>
+      </select>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-outline" id="export-pdf-btn" style="flex:1;justify-content:center">PDF</button>
+      <button class="btn btn-purple" id="export-pptx-btn" style="flex:1;justify-content:center">PowerPoint</button>
+    </div>
+    <p style="font-size:11px;color:var(--text4);margin-top:10px;line-height:1.5" id="export-note">
+      Both are landscape. PDF opens your print dialogue &mdash; choose &ldquo;Save as PDF&rdquo; as the destination.
+    </p>
   </div>
 </div>
 
@@ -2799,6 +2831,15 @@ var CloudSync = (function(){
         prev.annBody !== i.annBody ||
         prev.key !== i.key ||
         prev.order !== i.order ||
+        // These four must be compared too. Without them a tempo, cue or
+        // custom-slide edit was not recognised as a change: nothing was
+        // queued for upload, so the pending-write guard never protected it,
+        // and the next pull (within 10 seconds) wiped it from the screen.
+        // That is what made a newly set tempo appear and then vanish.
+        (prev.tempoBpm || null) !== (i.tempoBpm || null) ||
+        (prev.customText || '') !== (i.customText || '') ||
+        (prev.customTitle || '') !== (i.customTitle || '') ||
+        JSON.stringify(prev.cues || null) !== JSON.stringify(i.cues || null) ||
         JSON.stringify(prev.repeatConfig || {}) !== JSON.stringify(i.repeatConfig || {});
       if (changed) upserts.push(i);
     });
@@ -7224,8 +7265,13 @@ function _saveTempo(){
   if (!_tempoTargetItem) return;
   var sel = document.getElementById('tempo-select');
   var v = sel && sel.value ? parseInt(sel.value, 10) : null;
-  _tempoTargetItem.tempoBpm = v;
-  _tempoTargetItem._updatedAt = Date.now();
+  // Resolve from the live array. pull() rebuilds repItems with new objects
+  // every 10 seconds, so a reference captured when the modal opened can be
+  // detached by the time Save is pressed — writing to it would do nothing.
+  var live = (repItems || []).find(function(x){ return x.id === _tempoTargetItem.id; }) || _tempoTargetItem;
+  live.tempoBpm = v;
+  live._updatedAt = Date.now();
+  _tempoTargetItem = live;
   save();
   if (_metronomeTimer) { clearInterval(_metronomeTimer); _metronomeTimer = null; }
   closeModal('tempo-modal');
@@ -7338,9 +7384,12 @@ function _saveCue(){
   if (!_cueTargetItem) return;
   if (!_cueSelectedLabel) { toast('Choose or type a cue first', 'error'); return; }
   var slideIdx = document.getElementById('cue-slide-select').value;
-  _cueTargetItem.cues = _cueTargetItem.cues || {};
-  _cueTargetItem.cues[slideIdx] = _cueSelectedLabel;
-  _cueTargetItem._updatedAt = Date.now();
+  // Resolve from the live array — see the note in _saveTempo().
+  var live = (repItems || []).find(function(x){ return x.id === _cueTargetItem.id; }) || _cueTargetItem;
+  live.cues = live.cues || {};
+  live.cues[slideIdx] = _cueSelectedLabel;
+  live._updatedAt = Date.now();
+  _cueTargetItem = live;
   save();
   closeModal('cue-modal');
   if (currentRep) renderRepDetail(currentRep);
@@ -7400,9 +7449,10 @@ function _saveCustomSlide(){
   if (!currentRep) return;
 
   if (_editingCustomSlide) {
-    _editingCustomSlide.customTitle = title;
-    _editingCustomSlide.customText  = text;
-    _editingCustomSlide._updatedAt  = Date.now();
+    var liveCs = (repItems || []).find(function(x){ return x.id === _editingCustomSlide.id; }) || _editingCustomSlide;
+    liveCs.customTitle = title;
+    liveCs.customText  = text;
+    liveCs._updatedAt  = Date.now();
     toast('Slide updated', 'success');
   } else {
     var maxO = repItems.filter(function(i){ return i.repId === currentRep.id; })
@@ -7435,6 +7485,340 @@ on('cue-remove-btn',  'click', _removeCue);
 on('add-custom-btn', 'click', function(){ openCustomSlideModal(null); });
 on('close-custom-slide-modal', 'click', function(){ closeModal('custom-slide-modal'); });
 on('cs-save-btn', 'click', _saveCustomSlide);
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REPERTOIRE EXPORT — landscape PDF and PowerPoint
+// ═══════════════════════════════════════════════════════════════════════════
+// Produces a complete running order for the musicians and singers: every
+// item in order, with its key, tempo, cues, and which stanzas or choruses
+// repeat. Optionally the full words too.
+//
+// Both formats are built from ONE data model (_exportBuildModel) so they can
+// never drift apart and show different information.
+
+function _exportBuildModel(includeLyrics){
+  var items = repItems.filter(function(i){ return i.repId === currentRep.id; })
+                      .sort(function(a,b){ return a.order - b.order; });
+  var out = { name: currentRep.name, date: '', items: [] };
+
+  if (currentRep.date) {
+    try {
+      out.date = new Date(currentRep.date + 'T00:00:00')
+        .toLocaleDateString('en-ZA', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    } catch(e){ out.date = currentRep.date; }
+  }
+
+  var n = 0;
+  items.forEach(function(item){
+    if (item.itemType === 'announcement') {
+      n++;
+      out.items.push({ n:n, kind:'Announcement', title:item.annHeadline || 'Announcement',
+                       sub:'', detail:item.annBody || '', key:'', tempo:'', cues:[], repeats:[], lyrics:'' });
+      return;
+    }
+    if (item.itemType === 'segment') {
+      n++;
+      out.items.push({ n:n, kind:'Segment', title:item.segName || 'Segment',
+                       sub:'', detail:item.segNote || '', key:'', tempo:'', cues:[], repeats:[], lyrics:'' });
+      return;
+    }
+    if (item.itemType === 'custom') {
+      n++;
+      out.items.push({ n:n, kind:'Custom slide', title:item.customTitle || 'Custom slide',
+                       sub:'', detail:'',
+                       key:'', tempo: item.tempoBpm ? (item.tempoBpm + ' BPM') : '',
+                       cues:[], repeats:[], lyrics: item.customText || '' });
+      return;
+    }
+
+    var h = hymns.find(function(x){ return x.id === item.hymnId; });
+    if (!h) return;
+    n++;
+
+    // Which stanzas or choruses repeat, and how many times.
+    var repeats = [];
+    var rc = item.repeatConfig || {};
+    Object.keys(rc).forEach(function(k){
+      var times = parseInt(rc[k], 10);
+      if (!times || times <= 1) return;
+      var label = k.indexOf('chorus_') === 0
+        ? 'Chorus after stanza ' + k.replace('chorus_','')
+        : 'Stanza ' + k.replace('stanza_','');
+      repeats.push(label + ' \u00d7' + times);
+    });
+
+    // Cues, labelled with the slide they belong to.
+    var cues = [];
+    if (item.cues) {
+      var stanzaCount = (h.lyrics || '').split(/\n\s*\n/).filter(function(s){ return s.trim(); }).length;
+      var hasChorus = !!(h.chorus && h.chorus.trim());
+      Object.keys(item.cues).forEach(function(idx){
+        var i2 = parseInt(idx, 10);
+        var where;
+        if (hasChorus) {
+          var pair = Math.floor(i2 / 2) + 1;
+          where = (i2 % 2 === 0) ? ('Stanza ' + pair) : ('Chorus after stanza ' + pair);
+        } else {
+          where = 'Stanza ' + (i2 + 1);
+        }
+        cues.push(where + ': ' + item.cues[idx].label);
+      });
+    }
+
+    var lyrics = '';
+    if (includeLyrics) {
+      var parts = [];
+      var stz = (h.lyrics || '').split(/\n\s*\n/).filter(function(s){ return s.trim(); });
+      stz.forEach(function(s, si){
+        parts.push('Stanza ' + (si+1) + '\n' + s.trim());
+        if (h.chorus && h.chorus.trim()) parts.push('Chorus\n' + h.chorus.trim());
+      });
+      lyrics = parts.join('\n\n');
+    }
+
+    out.items.push({
+      n: n, kind: 'Hymn', title: h.title,
+      sub: h.book + ' #' + h.number + (h.language ? ' \u00b7 ' + h.language : ''),
+      detail: h.writer || '',
+      key: item.key || '',
+      tempo: item.tempoBpm ? (item.tempoBpm + ' BPM') : '',
+      cues: cues, repeats: repeats, lyrics: lyrics
+    });
+  });
+
+  return out;
+}
+
+// ── PDF (via the browser's print dialogue, landscape) ───────────────────────
+// Deliberately uses print rather than a PDF library: text stays selectable and
+// searchable, every font renders exactly as on screen, and it adds no
+// megabyte-sized dependency to a PWA that has to work offline.
+function _exportPDF(includeLyrics){
+  var m = _exportBuildModel(includeLyrics);
+  if (!m.items.length) { toast('Nothing to export — repertoire is empty', 'info'); return; }
+
+  var rows = m.items.map(function(it){
+    var chips = '';
+    if (it.key)   chips += '<span class="chip chip-key">Key ' + escHtml(it.key) + '</span>';
+    if (it.tempo) chips += '<span class="chip chip-tempo">' + escHtml(it.tempo) + '</span>';
+    it.repeats.forEach(function(r){ chips += '<span class="chip chip-rep">' + escHtml(r) + '</span>'; });
+    it.cues.forEach(function(cu){ chips += '<span class="chip chip-cue">' + escHtml(cu) + '</span>'; });
+
+    return '<tr>' +
+      '<td class="num">' + it.n + '</td>' +
+      '<td><div class="ttl">' + escHtml(it.title) + '</div>' +
+        (it.sub ? '<div class="sub">' + escHtml(it.sub) + '</div>' : '') +
+        (it.detail ? '<div class="sub">' + escHtml(it.detail) + '</div>' : '') +
+      '</td>' +
+      '<td class="kind">' + escHtml(it.kind) + '</td>' +
+      '<td class="chips">' + (chips || '<span class="none">\u2014</span>') + '</td>' +
+    '</tr>';
+  }).join('');
+
+  var lyricPages = '';
+  if (includeLyrics) {
+    m.items.forEach(function(it){
+      if (!it.lyrics) return;
+      lyricPages += '<div class="lyr-page">' +
+        '<h2>' + it.n + '. ' + escHtml(it.title) + '</h2>' +
+        (it.sub ? '<div class="lyr-sub">' + escHtml(it.sub) + '</div>' : '') +
+        '<div class="lyr-meta">' +
+          (it.key ? 'Key ' + escHtml(it.key) + '   ' : '') +
+          (it.tempo ? escHtml(it.tempo) + '   ' : '') +
+          (it.repeats.length ? escHtml(it.repeats.join(', ')) : '') +
+        '</div>' +
+        (it.cues.length ? '<div class="lyr-cues">' + escHtml(it.cues.join('   \u00b7   ')) + '</div>' : '') +
+        '<pre class="lyr-body">' + escHtml(it.lyrics) + '</pre>' +
+      '</div>';
+    });
+  }
+
+  var doc = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<title>' + escHtml(m.name) + ' \u2014 Running Order</title><style>' +
+    '@page { size: A4 landscape; margin: 12mm 14mm; }' +
+    '* { box-sizing: border-box; }' +
+    'body { font-family: Georgia, "Times New Roman", serif; color:#1a1a1a; margin:0; }' +
+    '.hdr { border-bottom:2px solid #333; padding-bottom:10px; margin-bottom:14px; }' +
+    '.hdr h1 { font-size:19pt; margin:0 0 3px; }' +
+    '.hdr .d { font-size:10pt; color:#555; }' +
+    '.hdr .c { font-size:8.5pt; color:#888; margin-top:3px; }' +
+    'table { width:100%; border-collapse:collapse; }' +
+    'th { text-align:left; font-size:8pt; text-transform:uppercase; letter-spacing:0.06em; color:#666; ' +
+      'border-bottom:1px solid #bbb; padding:5px 7px; font-family:Helvetica,Arial,sans-serif; }' +
+    'td { padding:7px; border-bottom:1px solid #e4e4e4; vertical-align:top; }' +
+    'td.num { width:26px; font-weight:bold; font-size:11pt; color:#C05A08; }' +
+    'td.kind { width:88px; font-size:8.5pt; color:#666; font-family:Helvetica,Arial,sans-serif; }' +
+    '.ttl { font-size:11.5pt; font-weight:bold; }' +
+    '.sub { font-size:8.5pt; color:#666; margin-top:1px; }' +
+    '.chips { width:46%; }' +
+    '.chip { display:inline-block; font-family:Helvetica,Arial,sans-serif; font-size:7.5pt; ' +
+      'font-weight:bold; padding:2px 7px; border-radius:9px; margin:1px 3px 1px 0; border:1px solid; }' +
+    '.chip-key   { color:#0369a1; border-color:#7dd3fc; background:#f0f9ff; }' +
+    '.chip-tempo { color:#6d28d9; border-color:#c4b5fd; background:#f5f3ff; }' +
+    '.chip-rep   { color:#B05007; border-color:#FFD9B8; background:#FFF8F3; }' +
+    '.chip-cue   { color:#065f46; border-color:#6ee7c7; background:#ecfdf5; }' +
+    '.none { color:#bbb; }' +
+    'tr { page-break-inside:avoid; }' +
+    '.lyr-page { page-break-before:always; }' +
+    '.lyr-page h2 { font-size:15pt; margin:0 0 2px; }' +
+    '.lyr-sub { font-size:9pt; color:#666; margin-bottom:5px; }' +
+    '.lyr-meta { font-family:Helvetica,Arial,sans-serif; font-size:8.5pt; color:#C05A08; margin-bottom:4px; }' +
+    '.lyr-cues { font-family:Helvetica,Arial,sans-serif; font-size:8.5pt; color:#065f46; margin-bottom:8px; }' +
+    '.lyr-body { font-family:Georgia,serif; font-size:10.5pt; line-height:1.55; white-space:pre-wrap; ' +
+      'column-count:2; column-gap:26px; margin:0; }' +
+    '.foot { margin-top:14px; font-size:7.5pt; color:#999; text-align:center; ' +
+      'font-family:Helvetica,Arial,sans-serif; }' +
+    '</style></head><body>' +
+    '<div class="hdr"><h1>' + escHtml(m.name) + '</h1>' +
+      (m.date ? '<div class="d">' + escHtml(m.date) + '</div>' : '') +
+      '<div class="c">' + m.items.length + ' items \u00b7 Key, tempo, cues and repeats included</div>' +
+    '</div>' +
+    '<table><thead><tr><th>#</th><th>Item</th><th>Type</th><th>Key, tempo, cues &amp; repeats</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>' +
+    lyricPages +
+    '<div class="foot">HymnDesk \u00b7 hymndesk.co.za</div>' +
+    '</body></html>';
+
+  var w = window.open('', '_blank');
+  if (!w) { toast('Allow pop-ups for this site to export', 'error'); return; }
+  w.document.write(doc);
+  w.document.close();
+  // Give the browser a moment to lay out and load fonts before printing.
+  setTimeout(function(){ try { w.focus(); w.print(); } catch(e){} }, 600);
+  toast('Choose "Save as PDF" in the print dialogue', 'info');
+}
+
+// ── POWERPOINT ──────────────────────────────────────────────────────────────
+// PptxGenJS is loaded from a CDN only when the user actually exports, so the
+// app itself stays dependency-free and the library is never downloaded by
+// someone who does not use this feature.
+function _loadPptxLib(){
+  return new Promise(function(resolve, reject){
+    if (window.PptxGenJS) return resolve(window.PptxGenJS);
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js';
+    s.onload  = function(){ window.PptxGenJS ? resolve(window.PptxGenJS) : reject(new Error('Library did not load')); };
+    s.onerror = function(){ reject(new Error('Could not download the PowerPoint library')); };
+    document.head.appendChild(s);
+  });
+}
+
+function _exportPPTX(includeLyrics){
+  var m = _exportBuildModel(includeLyrics);
+  if (!m.items.length) { toast('Nothing to export — repertoire is empty', 'info'); return; }
+
+  var btn = document.getElementById('export-pptx-btn');
+  if (btn) { btn.textContent = 'Building…'; btn.disabled = true; }
+
+  _loadPptxLib().then(function(Pptx){
+    var pptx = new Pptx();
+    pptx.layout = 'LAYOUT_16x9';          // landscape
+    pptx.title  = m.name;
+
+    var ORANGE = 'C05A08', DARK = '1A1A1A', GREY = '666666';
+
+    // Cover
+    var s1 = pptx.addSlide();
+    s1.background = { color: 'FFFFFF' };
+    s1.addText(m.name, { x:0.6, y:1.9, w:9.0, h:1.0, fontSize:40, bold:true, color:DARK, fontFace:'Georgia' });
+    if (m.date) s1.addText(m.date, { x:0.6, y:2.9, w:9.0, h:0.5, fontSize:16, color:ORANGE, fontFace:'Georgia' });
+    s1.addText(m.items.length + ' items', { x:0.6, y:3.4, w:9.0, h:0.4, fontSize:12, color:GREY });
+    s1.addText('HymnDesk', { x:0.6, y:4.9, w:9.0, h:0.3, fontSize:9, color:'AAAAAA' });
+
+    // Running order table
+    var s2 = pptx.addSlide();
+    s2.addText('Running order', { x:0.5, y:0.35, w:9.0, h:0.5, fontSize:22, bold:true, color:DARK, fontFace:'Georgia' });
+    var head = [
+      { text:'#',     options:{ bold:true, fill:'F2F2F2', fontSize:10, color:GREY } },
+      { text:'Item',  options:{ bold:true, fill:'F2F2F2', fontSize:10, color:GREY } },
+      { text:'Type',  options:{ bold:true, fill:'F2F2F2', fontSize:10, color:GREY } },
+      { text:'Key',   options:{ bold:true, fill:'F2F2F2', fontSize:10, color:GREY } },
+      { text:'Tempo', options:{ bold:true, fill:'F2F2F2', fontSize:10, color:GREY } },
+      { text:'Cues & repeats', options:{ bold:true, fill:'F2F2F2', fontSize:10, color:GREY } }
+    ];
+    var body = m.items.map(function(it){
+      var extra = it.repeats.concat(it.cues).join('  |  ');
+      return [
+        { text:String(it.n), options:{ fontSize:10, bold:true, color:ORANGE } },
+        { text:it.title + (it.sub ? '\n' + it.sub : ''), options:{ fontSize:10, color:DARK } },
+        { text:it.kind,  options:{ fontSize:9,  color:GREY } },
+        { text:it.key || '\u2014',   options:{ fontSize:10, color:'0369A1' } },
+        { text:it.tempo || '\u2014', options:{ fontSize:10, color:'6D28D9' } },
+        { text:extra || '\u2014',    options:{ fontSize:9,  color:'065F46' } }
+      ];
+    });
+    s2.addTable([head].concat(body), {
+      x:0.4, y:1.0, w:9.2,
+      colW:[0.4, 3.2, 1.0, 0.8, 1.0, 2.8],
+      border:{ pt:0.5, color:'DDDDDD' },
+      valign:'top', autoPage:true, autoPageRepeatHeader:true
+    });
+
+    // One detail slide per item
+    m.items.forEach(function(it){
+      var s = pptx.addSlide();
+      s.addText(String(it.n) + '. ' + it.title, { x:0.6, y:0.5, w:9.0, h:0.7, fontSize:28, bold:true, color:DARK, fontFace:'Georgia' });
+      if (it.sub) s.addText(it.sub, { x:0.6, y:1.2, w:9.0, h:0.35, fontSize:13, color:GREY });
+
+      var y = 1.75;
+      if (it.key)   { s.addText('Key: ' + it.key,   { x:0.6, y:y, w:2.4, h:0.4, fontSize:15, bold:true, color:'0369A1' }); }
+      if (it.tempo) { s.addText('Tempo: ' + it.tempo, { x:3.1, y:y, w:2.6, h:0.4, fontSize:15, bold:true, color:'6D28D9' }); }
+      if (it.key || it.tempo) y += 0.55;
+
+      if (it.repeats.length) {
+        s.addText('Repeats', { x:0.6, y:y, w:9.0, h:0.28, fontSize:10, bold:true, color:GREY });
+        s.addText(it.repeats.join('   \u00b7   '), { x:0.6, y:y+0.28, w:9.0, h:0.4, fontSize:13, color:'B05007' });
+        y += 0.8;
+      }
+      if (it.cues.length) {
+        s.addText('Singer cues', { x:0.6, y:y, w:9.0, h:0.28, fontSize:10, bold:true, color:GREY });
+        s.addText(it.cues.join('   \u00b7   '), { x:0.6, y:y+0.28, w:9.0, h:0.6, fontSize:13, color:'065F46' });
+        y += 1.0;
+      }
+      if (it.detail) {
+        s.addText(it.detail, { x:0.6, y:y, w:9.0, h:0.6, fontSize:12, color:GREY, italic:true });
+      }
+
+      if (includeLyrics && it.lyrics) {
+        var ls = pptx.addSlide();
+        ls.addText(it.title, { x:0.5, y:0.3, w:9.0, h:0.5, fontSize:19, bold:true, color:DARK, fontFace:'Georgia' });
+        ls.addText(it.lyrics, { x:0.5, y:0.9, w:9.0, h:4.4, fontSize:12, color:DARK,
+                                fontFace:'Georgia', lineSpacingMultiple:1.15, shrinkText:true });
+      }
+    });
+
+    var safe = m.name.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '') || 'repertoire';
+    return pptx.writeFile({ fileName: safe + '.pptx' });
+  }).then(function(){
+    toast('PowerPoint downloaded', 'success');
+    closeModal('export-modal');
+  }).catch(function(err){
+    toast('Export failed: ' + ((err && err.message) || 'unknown error'), 'error');
+    try { console.error('[export] pptx failed:', err); } catch(e){}
+  }).then(function(){
+    if (btn) { btn.textContent = 'PowerPoint'; btn.disabled = false; }
+  });
+}
+
+function openExportModal(){
+  if (!currentRep) return;
+  var nameEl = document.getElementById('export-rep-name');
+  if (nameEl) {
+    var count = repItems.filter(function(i){ return i.repId === currentRep.id; }).length;
+    nameEl.textContent = currentRep.name + ' \u00b7 ' + count + ' item' + (count === 1 ? '' : 's');
+  }
+  openModal('export-modal');
+}
+
+on('export-rep-btn',      'click', openExportModal);
+on('close-export-modal',  'click', function(){ closeModal('export-modal'); });
+on('export-pdf-btn',      'click', function(){
+  _exportPDF(document.getElementById('export-lyrics').value === 'yes');
+});
+on('export-pptx-btn',     'click', function(){
+  _exportPPTX(document.getElementById('export-lyrics').value === 'yes');
+});
 
 
 // ── SYNC STATUS INDICATOR ───────────────────────────────────────────────────
