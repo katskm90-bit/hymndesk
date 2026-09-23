@@ -177,8 +177,15 @@ Before modifying or removing any existing feature:
 
 **Known security issues pending Phase 1 remediation:**
 1. GitHub PAT in localStorage key `lh_gh_token` (index.html lines 5141–5142)
-2. Client-side SHA-256 admin password check (index.html ~2037–2120)
-3. PayFast credentials in localStorage keys `lh_payfast_*` (index.html ~1459–1496)
+   Used by exportAndPublish() to push hymns.json to the main branch via GitHub API.
+   Has repository write access. Replacement: Supabase Edge Function holds PAT server-side.
+2. Admin auth uses server-side bcrypt RPC `verify_admin_password` (NOT client-side SHA-256 —
+   the SHA-256 _hashPwd() function at ~line 2037 is dead code, never called). Current risk:
+   sessionStorage key `lh_admin_auth` can be set via DevTools to unlock UI-only controls,
+   but server-side RPCs still enforce auth. Phase 1 target: migrate to Supabase Auth.
+3. PayFast credentials in localStorage keys `pf_merchant_id`, `pf_merchant_key`,
+   `pf_passphrase`, `pf_item_name`, `pf_return_url`, `pf_cancel_url` (index.html ~5447–5516).
+   No server-side ITN handler. No signature implementation. Replacement: Edge Function.
 
 ---
 
