@@ -37,7 +37,7 @@ jobs:
         run: pnpm run lint
 
       - name: Test
-        run: pnpm run test --if-present
+        run: pnpm run test
 
       - name: Build packages
         run: pnpm run build --filter='./packages/*'
