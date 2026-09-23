@@ -1,0 +1,11 @@
+node_modules
+dist
+.turbo
+*.min.js
+pnpm-lock.yaml
+# Production monolith — not reformatted until Phase 2 migration
+index.html
+admin.html
+solfa-converter.html
+sw.js
+style.css

@@ -1,0 +1,42 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+.next
+out
+
+# Turbo
+.turbo
+
+# Environment — never commit real credentials
+.env
+.env.local
+.env.*.local
+
+# Expo / React Native
+.expo
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build
+
+# Tauri
+apps/desktop/src-tauri/target
+
+# IDE
+.DS_Store
+.vscode/settings.json
+*.swp
+*.swo
+
+# Test coverage
+coverage
+
+# TypeScript build cache
+*.tsbuildinfo
