@@ -1,0 +1,148 @@
+/*
+ * HymnDesk Design Tokens
+ * Source of truth for all platform colour, typography, and spacing values.
+ * Extracted from the production index.html :root and html.dark blocks.
+ * React Native equivalents are in react-native.ts.
+ */
+
+/* ── Light mode (default) ─────────────────────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --hd-bg:           #ffffff;
+  --hd-bg2:          #f8fafc;
+  --hd-bg3:          #f1f5f9;
+
+  /* Surfaces */
+  --hd-card:         #ffffff;
+  --hd-modal:        #ffffff;
+  --hd-input-bg:     #f8fafc;
+
+  /* Borders */
+  --hd-border:       #e2e8f0;
+  --hd-border2:      #cbd5e1;
+
+  /* Text */
+  --hd-text:         #1e293b;
+  --hd-text2:        #475569;
+  --hd-text3:        #64748b;
+  --hd-text4:        #94a3b8;
+
+  /* Brand — orange */
+  --hd-orange:       #E8650A;
+  --hd-orange-dark:  #C05A08;
+  --hd-orange-hover: #d45a08;
+  --hd-orange-tint:  #FFF0E6;
+  --hd-orange-tint2: #FFD9B8;
+
+  /* Semantic */
+  --hd-destructive:       #dc2626;
+  --hd-destructive-bg:    #fef2f2;
+  --hd-destructive-border:#fecaca;
+  --hd-success:           #065f46;
+  --hd-success-bg:        #f0fdf4;
+  --hd-info:              #1e3a5f;
+  --hd-info-bg:           #eff6ff;
+
+  /* Shadows */
+  --hd-shadow:  rgba(0, 0, 0, 0.05);
+  --hd-shadow2: rgba(0, 0, 0, 0.15);
+
+  color-scheme: light;
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --hd-bg:          #1a1a1a;
+    --hd-bg2:         #242424;
+    --hd-bg3:         #2e2e2e;
+    --hd-card:        #242424;
+    --hd-modal:       #242424;
+    --hd-input-bg:    #1a1a1a;
+    --hd-border:      #383838;
+    --hd-border2:     #505050;
+    --hd-text:        #f0f0f0;
+    --hd-text2:       #c0c0c0;
+    --hd-text3:       #909090;
+    --hd-text4:       #606060;
+    --hd-orange:      #E8650A;
+    --hd-orange-dark: #C05A08;
+    --hd-shadow:      rgba(0, 0, 0, 0.4);
+    --hd-shadow2:     rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --hd-bg:          #1a1a1a;
+  --hd-bg2:         #242424;
+  --hd-bg3:         #2e2e2e;
+  --hd-card:        #242424;
+  --hd-modal:       #242424;
+  --hd-input-bg:    #1a1a1a;
+  --hd-border:      #383838;
+  --hd-border2:     #505050;
+  --hd-text:        #f0f0f0;
+  --hd-text2:       #c0c0c0;
+  --hd-text3:       #909090;
+  --hd-text4:       #606060;
+  --hd-orange:      #E8650A;
+  --hd-orange-dark: #C05A08;
+  --hd-shadow:      rgba(0, 0, 0, 0.4);
+  --hd-shadow2:     rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+/* ── Typography ───────────────────────────────────────────────────────────── */
+:root {
+  --hd-font-display: 'Playfair Display', Georgia, serif;
+  --hd-font-body:    'Inter', system-ui, -apple-system, sans-serif;
+  --hd-font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Type scale */
+  --hd-text-xs:   11px;
+  --hd-text-sm:   12px;
+  --hd-text-base: 14px;
+  --hd-text-md:   15px;
+  --hd-text-lg:   17px;
+  --hd-text-xl:   20px;
+  --hd-text-2xl:  26px;
+  --hd-text-3xl:  32px;
+
+  /* Hymn reading sizes */
+  --hd-hymn-title-sm:   22px;
+  --hd-hymn-title-md:   28px;
+  --hd-hymn-title-lg:   36px;
+
+  /* Projection sizes */
+  --hd-proj-verse-min:  26px;
+  --hd-proj-verse-max:  76px;
+  --hd-proj-label-min:  20px;
+  --hd-proj-label-max:  46px;
+}
+
+/* ── Spacing (4px base unit) ──────────────────────────────────────────────── */
+:root {
+  --hd-space-1:  4px;
+  --hd-space-2:  8px;
+  --hd-space-3:  12px;
+  --hd-space-4:  16px;
+  --hd-space-5:  20px;
+  --hd-space-6:  24px;
+  --hd-space-8:  32px;
+  --hd-space-10: 40px;
+  --hd-space-12: 48px;
+  --hd-space-16: 64px;
+  --hd-space-20: 80px;
+  --hd-space-24: 96px;
+}
+
+/* ── Corner radii ─────────────────────────────────────────────────────────── */
+:root {
+  --hd-radius-sm:  6px;
+  --hd-radius-md:  9px;
+  --hd-radius-lg:  13px;
+  --hd-radius-xl:  16px;
+  --hd-radius-2xl: 18px;
+  --hd-radius-full: 9999px;
+}

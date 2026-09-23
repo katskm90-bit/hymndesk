@@ -1,0 +1,28 @@
+{
+  "name": "@hymndesk/admin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "HymnDesk Administration — separate secured admin surface (Phase 2)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@hymndesk/domain": "workspace:*",
+    "@hymndesk/types": "workspace:*",
+    "@hymndesk/design-tokens": "workspace:*",
+    "@hymndesk/api-client": "workspace:*",
+    "@hymndesk/auth": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  }
+}

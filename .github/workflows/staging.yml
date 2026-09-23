@@ -1,0 +1,54 @@
+name: Staging Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment: staging
+    # Phase 0: Staging deployment wired up but apps/web is not yet deployed.
+    # This workflow will be expanded in Phase 2 when the Vite build replaces
+    # the root monolith and a proper gh-pages CI pipeline is introduced.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm run build --filter='./packages/*'
+
+      - name: Validate staging env
+        run: |
+          echo "Staging environment variables:"
+          echo "VITE_APP_ENV=$VITE_APP_ENV"
+          echo "VITE_SUPABASE_URL=${VITE_SUPABASE_URL:+[set]}"
+          echo "VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY:+[set]}"
+        env:
+          VITE_APP_ENV: staging
+          VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+
+      # Phase 2: Replace the placeholder step below with the Vite build and
+      # gh-pages deploy step once apps/web migration is complete.
+      - name: Staging deploy placeholder
+        run: echo "Phase 0 — full staging deploy wired in Phase 2"
